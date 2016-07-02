@@ -7,7 +7,6 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.widget.Toast;
 
 public class WifiChangeReceiver extends BroadcastReceiver {
     public WifiChangeReceiver() {
@@ -26,7 +25,7 @@ public class WifiChangeReceiver extends BroadcastReceiver {
         }
 //        context.sendBroadcast(PicSyncIntent);
         context.startService(PicSyncIntent);
-        MainScreen.SetState(currentssid);
+//        MainScreen.SetState(currentssid);
     }
 
     public static String getCurrentSsid(Context context) {

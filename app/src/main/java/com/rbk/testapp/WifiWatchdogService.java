@@ -7,7 +7,6 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Process;
 import android.util.Log;
-import android.widget.Toast;
 
 public class WifiWatchdogService extends Service {
     private static WifiChangeReceiver WCR;
@@ -25,7 +24,7 @@ public class WifiWatchdogService extends Service {
     //The system calls this method when another component, such as an activity,
     //requests that the service be started, by calling startService()
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Toast.makeText(this, "service starting", Toast.LENGTH_SHORT).show();
+//        Toast.makeText(this, "service starting", Toast.LENGTH_SHORT).show();
         return START_STICKY;
     }
 

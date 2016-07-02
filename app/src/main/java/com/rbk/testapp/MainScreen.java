@@ -24,6 +24,7 @@ public class MainScreen extends AppCompatActivity {
             Bundle bundle = intent.getExtras();
             if (bundle != null) {
                 String string = bundle.getString(PicSync.STATE);
+                    Toast.makeText(MainScreen.this, "PicSync says: "+ string, Toast.LENGTH_SHORT).show();
                     twPicSyncState.setText(string);
             }
         }
@@ -60,19 +61,24 @@ public class MainScreen extends AppCompatActivity {
 */
         Log.i("MainScreen","onCreate finished");
     }
-
     protected void onResume() {
+        Log.i("MainScreen","onResume called");
         super.onResume();
         registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
+        Intent PicSyncIntent = new Intent(this,PicSync.class);
+        PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
+        this.startService(PicSyncIntent);
     }
+/*
 
     @Override
     protected void onPause() {
-        super.onPause();
+        Log.i("MainScreen","onPause called");
+//        super.onPause();
         unregisterReceiver(MainScreenReceiver);
     }
     public static void SetState(String state){
         alreadyRunning=false;
         TestBox1.setText(state);
     }
-}
+*/}
