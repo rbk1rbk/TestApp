@@ -11,8 +11,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 public class MainScreen extends AppCompatActivity {
-    private static TextView TestBox1;
-    private static TextView twPicSyncState;
+    static TextView TestBox1;
+    static TextView twPicSyncState;
     private static boolean alreadyRunning=false;
 
 
@@ -24,8 +24,9 @@ public class MainScreen extends AppCompatActivity {
             Bundle bundle = intent.getExtras();
             if (bundle != null) {
                 String string = bundle.getString(PicSync.STATE);
+                    Log.i("MainScreen","onReceive got string "+string);
+                    MainScreen.twPicSyncState.setText(string);
                     Toast.makeText(MainScreen.this, "PicSync says: "+ string, Toast.LENGTH_SHORT).show();
-                    twPicSyncState.setText(string);
             }
         }
     };
@@ -37,13 +38,13 @@ public class MainScreen extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main_screen);
         Log.i("MainScreen","onCreate called");
+        TestBox1 = (TextView)findViewById(R.id.TestBox1);
+        twPicSyncState = (TextView)findViewById(R.id.twPicSyncState);
         if (alreadyRunning){
             Log.i("MainScreen","Already running, return");
             return;
         }
         alreadyRunning=true;
-        TestBox1 = (TextView)findViewById(R.id.TestBox1);
-        twPicSyncState = (TextView)findViewById(R.id.twPicSyncState);
 
 //        WifiWatchdogService WWS = new WifiWatchdogService();
         Intent intent = new Intent(this,WifiWatchdogService.class);
@@ -69,16 +70,15 @@ public class MainScreen extends AppCompatActivity {
         PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
         this.startService(PicSyncIntent);
     }
-/*
 
     @Override
     protected void onPause() {
         Log.i("MainScreen","onPause called");
-//        super.onPause();
+        super.onPause();
         unregisterReceiver(MainScreenReceiver);
     }
     public static void SetState(String state){
         alreadyRunning=false;
         TestBox1.setText(state);
     }
-*/}
+}
