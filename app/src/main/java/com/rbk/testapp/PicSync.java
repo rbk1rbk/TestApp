@@ -3,6 +3,7 @@ package com.rbk.testapp;
 import android.app.IntentService;
 import android.content.Context;
 import android.content.Intent;
+import android.os.IBinder;
 import android.util.Log;
 
 /**
@@ -13,6 +14,9 @@ import android.util.Log;
  * helper methods.
  */
 public class PicSync extends IntentService {
+    public static final String STATE="State";
+    public static final String NOTIFICATION = "com.rbk.testapp.MainScreen.receiver";
+
     private static String MyState="New";
     private static Context ParentContext;
     // TODO: Rename actions, choose action names that describe tasks that this
@@ -27,6 +31,13 @@ public class PicSync extends IntentService {
 
     public PicSync() {
         super("PicSync");
+    }
+
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        // TODO: Return the communication channel to the service.
+        throw new UnsupportedOperationException("Not yet implemented");
     }
 
     /**
@@ -61,6 +72,12 @@ public class PicSync extends IntentService {
         context.startService(intent);
     }
 */
+    private void PublishState(String State2Send) {
+        Intent intent = new Intent(NOTIFICATION);
+        intent.putExtra(STATE, State2Send);
+        sendBroadcast(intent);
+    }
+
     @Override
     protected void onHandleIntent(Intent intent) {
         if (intent != null) {
@@ -70,7 +87,7 @@ public class PicSync extends IntentService {
                 final String param1 = intent.getStringExtra(EXTRA_PARAM1);
                 final String param2 = intent.getStringExtra(EXTRA_PARAM2);
                 handleActionGetState(param1, param2);
-            };
+            }
             if (ACTION_START_SYNC.equals(action)) {
                 final String param1 = intent.getStringExtra(EXTRA_PARAM1);
                 final String param2 = intent.getStringExtra(EXTRA_PARAM2);
@@ -86,15 +103,18 @@ public class PicSync extends IntentService {
 
     private void handleActionGetState(String param1, String param2) {
         Log.i("PicSync","handleActionGetState: "+MyState);
+        PublishState(MyState);
     }
 
     private void handleActionStartSync(String param1, String param2) {
         MyState="Sync started";
         Log.i("PicSync","handleActionStartSync: "+MyState);
+        PublishState(MyState);
     }
 
     private void handleActionStopSync(String param1, String param2) {
         MyState="Sync stopped";
         Log.i("PicSync","handleActionStopSync: "+MyState);
+        PublishState(MyState);
     }
 }

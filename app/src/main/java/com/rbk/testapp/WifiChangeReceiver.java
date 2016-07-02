@@ -20,19 +20,17 @@ public class WifiChangeReceiver extends BroadcastReceiver {
         Intent PicSyncIntent = new Intent(context, PicSync.class);
         String currentssid = getCurrentSsid(context);
         if (currentssid == null) {
-            currentssid = "Update: No WiFi connection";
             PicSyncIntent.setAction(PicSync.ACTION_STOP_SYNC);
         } else{
             PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
         }
 //        context.sendBroadcast(PicSyncIntent);
         context.startService(PicSyncIntent);
-        Toast.makeText(context, "WifiReceiver says: "+currentssid, Toast.LENGTH_LONG).show();
         MainScreen.SetState(currentssid);
     }
 
     public static String getCurrentSsid(Context context) {
-        String ssid = null;
+        String ssid;
         ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo networkInfo = cm.getActiveNetworkInfo();
         if (networkInfo == null) {
@@ -47,7 +45,7 @@ public class WifiChangeReceiver extends BroadcastReceiver {
             if (connectionInfo != null) {
                 ssid = connectionInfo.getSSID();
                 return ssid.replaceAll("^\"|\"$","");
-            };
+            }
         }
         else {
             return null;
