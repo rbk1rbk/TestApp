@@ -6,6 +6,18 @@ import android.content.Intent;
 import android.os.IBinder;
 import android.util.Log;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.MalformedURLException;
+import java.net.URLConnection;
+import java.net.UnknownHostException;
+
+import jcifs.smb.NtlmPasswordAuthentication;
+import jcifs.smb.SmbException;
+import jcifs.smb.SmbFile;
+import jcifs.smb.SmbFileInputStream;
+
 /**
  * An {@link IntentService} subclass for handling asynchronous task requests in
  * a service on a separate handler thread.
@@ -19,8 +31,7 @@ public class PicSync extends IntentService {
 
     private static String MyState="New";
     private static Context ParentContext;
-    // TODO: Rename actions, choose action names that describe tasks that this
-    // IntentService can perform, e.g. ACTION_FETCH_NEW_ITEMS
+
     static final String ACTION_GET_STATE = "com.rbk.testapp.action.PicSync.GetState";
     static final String ACTION_START_SYNC = "com.rbk.testapp.action.PicSync.Start";
     static final String ACTION_STOP_SYNC = "com.rbk.testapp.action.PicSync.Stop";
@@ -109,6 +120,7 @@ public class PicSync extends IntentService {
     private void handleActionStartSync(String param1, String param2) {
         MyState="Sync started";
         Log.i("PicSync","handleActionStartSync: "+MyState);
+        readTestFile();
         PublishState(MyState);
     }
 
@@ -116,5 +128,79 @@ public class PicSync extends IntentService {
         MyState="Sync stopped";
         Log.i("PicSync","handleActionStopSync: "+MyState);
         PublishState(MyState);
+    }
+
+    public void readTestFile() {
+        Log.i("PicSync","readTestFile: start");
+        jcifs.Config.setProperty("jcifs.netbios.wins", "192.168.0.1");
+        NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication(null,null, null);
+        SmbFile[] domains = null;
+        try {
+                domains = (new SmbFile("smb://NET01/",auth)).listFiles();
+            } catch (SmbException e1) {
+                e1.printStackTrace();
+            } catch(MalformedURLException e) {
+            e.printStackTrace();
+            Log.i("PicSync", "Domain NOT listed" + e.getMessage());
+            return;
+        }
+        SmbFile sfile;
+        SmbFileInputStream in;
+        try {
+            Log.i("PicSync","Opening file: start");
+//            in = new SmbFileInputStream(new SmbFile("smb://192.168.0.1/testexport/somefile.txt"),auth);
+            sfile = new SmbFile("smb://192.168.0.1/testexport/somefile.txt",auth);
+            Log.i("PicSync","File opened");
+        }catch(MalformedURLException e) {
+            e.printStackTrace();
+            Log.i("PicSync", "File NOT opened " + e.getMessage());
+            return;
+        }
+        try {
+            in=new SmbFileInputStream(sfile);
+        }catch(MalformedURLException e) {
+            e.printStackTrace();
+            Log.i("PicSync", "File NOT opened " + e.getMessage());
+            return;
+        }catch(SmbException e) {
+            e.printStackTrace();
+            Log.i("PicSync","File NOT opened " + e.getMessage());
+            return;
+        }catch(UnknownHostException e){
+            e.printStackTrace();
+            Log.i("PicSync","File NOT opened " + e.getMessage());
+            return;
+        }
+        byte[] b = new byte[8192];
+        int n;
+        try {
+            while ((n = in.read(b)) > 0) {
+                System.out.write(b, 0, n);
+            }
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+    public String ping(String url) {
+        String str = "";
+        try {
+            Process process = Runtime.getRuntime().exec("/system/bin/ping -c 8 " + url);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    process.getInputStream()));
+            int i;
+            char[] buffer = new char[4096];
+            StringBuffer output = new StringBuffer();
+            while ((i = reader.read(buffer)) > 0)
+                output.append(buffer, 0, i);
+            reader.close();
+
+            // body.append(output.toString()+"\n");
+            str = output.toString();
+            // Log.d(TAG, str);
+        } catch (IOException e) {
+            // body.append("Error\n");
+            e.printStackTrace();
+        }
+        return str;
     }
 }
