@@ -112,17 +112,20 @@ public class PicSync extends IntentService {
         }
     }
 
-    private void DoSync(){
+    public void DoSync(){
         Log.i("PicSync","DoSync started");
         Log.i("PicSync","Sync started");
         MyState="Sync started";
         PublishState(MyState);
+        /*
         try {
             Thread.sleep(10000);
         } catch (InterruptedException e) {
         // TODO Auto-generated catch block
         e.printStackTrace();
     }
+    */
+        readTestFile();
         Log.i("PicSync","Sync finished");
         MyState="Sync finished";
         PublishState(MyState);
@@ -139,7 +142,6 @@ public class PicSync extends IntentService {
         // TODO Prerobit na novy thread?
         DoSync();
         Log.i("PicSync","handleActionStartSync: "+MyState);
-        readTestFile();
         PublishState(MyState);
     }
 
@@ -150,10 +152,10 @@ public class PicSync extends IntentService {
     }
 
     public void readTestFile() {
-        SharedPreferences settings = getSharedPreferences(MainScreen.SMBPREFS, 0);
-        String smbservername=settings.getString("smbservername","Not defined");
-        String smbuser=settings.getString("smbuser","USER");
-        String smbpasswd=settings.getString("smbpasswd","PASSWORD");
+        SharedPreferences settings = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
+        String smbservername=settings.getString(MainScreen.prefsSMBSRV,"192.168.0.1");
+        String smbuser=settings.getString(MainScreen.prefsSMBUSER,"");
+        String smbpasswd=settings.getString(MainScreen.prefsSMBPWD,"PASSWORD");
         Log.i("PicSync","Settings retrieved: "+smbuser+":"+smbpasswd+"@"+smbservername);
 
 
@@ -167,18 +169,19 @@ public class PicSync extends IntentService {
                 domains = (new SmbFile("smb://NET01/",auth)).listFiles();
             } catch (SmbException e1) {
                 e1.printStackTrace();
-            return;
+                return;
             } catch(MalformedURLException e) {
-            e.printStackTrace();
-            Log.i("PicSync", "Domain NOT listed" + e.getMessage());
-            return;
+                e.printStackTrace();
+                Log.i("PicSync", "Domain NOT listed" + e.getMessage());
+                return;
         }
         SmbFile sfile;
         SmbFileInputStream in;
         try {
-            Log.i("PicSync","Opening file: start");
+            String fileurl="smb://"+smbservername+"/testexport/somefile.txt";
+            Log.i("PicSync","Opening file: "+fileurl);
 //            in = new SmbFileInputStream(new SmbFile("smb://192.168.0.1/testexport/somefile.txt"),auth);
-            sfile = new SmbFile("smb://192.168.0.1/testexport/somefile.txt",auth);
+            sfile = new SmbFile(fileurl,auth);
             Log.i("PicSync","File opened");
         }catch(MalformedURLException e) {
             e.printStackTrace();

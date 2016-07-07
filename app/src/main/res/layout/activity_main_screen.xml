@@ -22,8 +22,7 @@
         android:id="@+id/twPicSyncStateLabel"
         android:layout_below="@+id/TestBox1"
         android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_marginTop="56dp" />
+        android:layout_alignParentStart="true"/>
 
     <TextView
         android:layout_width="wrap_content"
@@ -35,4 +34,62 @@
         android:layout_toEndOf="@+id/twPicSyncStateLabel"
         android:layout_marginLeft="10dp"
         android:layout_marginStart="10dp" />
+
+    <EditText
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:inputType="text"
+        android:text="guest"
+        android:ems="10"
+        android:id="@+id/txsmbUser"
+        android:layout_below="@+id/twPicSyncStateLabel"
+        android:layout_toRightOf="@+id/twsmbUser"
+        android:layout_toEndOf="@+id/twsmbUser"
+        android:layout_marginTop="25dp"/>
+
+    <EditText
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword"
+        android:ems="10"
+        android:id="@+id/txsmbPWD"
+        android:labelFor="@id/txsmbPWD"
+        android:layout_below="@+id/twsmbUser"
+        android:layout_toRightOf="@+id/twPicSyncStateLabel"
+        android:layout_toEndOf="@+id/twPicSyncStateLabel"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:text="SMB User: "
+        android:id="@+id/twsmbUser"
+        android:layout_marginTop="37dp"
+        android:layout_below="@+id/twPicSyncStateLabel"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:labelFor="@id/txsmbUser"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:text="SMB Pwd:"
+        android:id="@+id/twsmbPWD"
+        android:layout_alignBaseline="@+id/txsmbPWD"
+        android:layout_alignBottom="@+id/txsmbPWD"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"/>
+
+    <Button
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Save"
+        android:id="@+id/btnSaveSMB"
+        android:layout_below="@+id/txsmbPWD"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:onClick="btnSaveOnClickListener"/>
+
 </RelativeLayout>

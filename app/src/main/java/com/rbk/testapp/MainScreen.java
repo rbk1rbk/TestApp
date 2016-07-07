@@ -8,15 +8,23 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
 public class MainScreen extends AppCompatActivity {
     static TextView TestBox1;
     static TextView twPicSyncState;
-    public static final String SMBPREFS="preferences.smb";
+    public static final String prefsSMBPREFS="preferences.smb";
+    public static final String prefsSMBUSER="smbuser";
+    public static final String prefsSMBPWD="smbpwd";
+    public static final String prefsSMBSRV="smbsrv";
     private static boolean alreadyRunning=false;
-
+    static Button button;
+    static EditText txsmbUser;
+    static EditText txsmbPWD;
 
 
     private BroadcastReceiver MainScreenReceiver = new BroadcastReceiver() {
@@ -33,9 +41,36 @@ public class MainScreen extends AppCompatActivity {
         }
     };
 
+    protected void DrawMainScreen(){
+        button = (Button) findViewById(R.id.btnSaveSMB);
+        txsmbUser = (EditText) findViewById(R.id.txsmbUser);
+        txsmbPWD = (EditText) findViewById(R.id.txsmbPWD);
 
+        SharedPreferences settings = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
+        txsmbUser.setText(settings.getString(MainScreen.prefsSMBUSER,"guest"));
+        txsmbPWD.setText(settings.getString(MainScreen.prefsSMBPWD,"passw0rd"));
+    };
 
-    @Override
+    public void btnSaveOnClickListener(View v) {
+        handlebtnSaveonClick();
+    }
+
+    private void handlebtnSaveonClick(){
+//        button.setOnClickListener(new View.OnClickListener() {
+//            public void onClick(View v) {
+                SharedPreferences prefs = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
+                SharedPreferences.Editor editor = prefs.edit();
+                editor.putString(MainScreen.prefsSMBUSER,txsmbUser.getText().toString());
+                editor.putString(MainScreen.prefsSMBPWD,txsmbPWD.getText().toString());
+                editor.commit();
+                this.startService(new Intent(MainScreen.this,PicSync.class).setAction(PicSync.ACTION_START_SYNC));
+
+  //          }
+  //      });
+
+    };
+
+        @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main_screen);
@@ -56,19 +91,7 @@ public class MainScreen extends AppCompatActivity {
         Intent PicSyncIntent = new Intent(this,PicSync.class);
         PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
         this.startService(PicSyncIntent);
-
-        SharedPreferences settings = getSharedPreferences(MainScreen.SMBPREFS, 0);
-        SharedPreferences.Editor editor = settings.edit();
-        String smbservername=settings.getString("smbservername","Not defined");
-        editor.putString("smbservername","192.168.0.1");
-        editor.commit();
-        smbservername=settings.getString("smbservername","Not defined");
-
-        /*
-        finish();
-        System.exit(0);
-        return;
-*/
+            DrawMainScreen();
         Log.i("MainScreen","onCreate finished");
 
     }
@@ -78,6 +101,8 @@ public class MainScreen extends AppCompatActivity {
         registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
         Intent PicSyncIntent = new Intent(this,PicSync.class);
         PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
+        this.startService(PicSyncIntent);
+        DrawMainScreen();
         this.startService(PicSyncIntent);
     }
 
