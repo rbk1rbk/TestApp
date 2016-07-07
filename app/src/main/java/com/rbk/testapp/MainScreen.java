@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
@@ -13,6 +14,7 @@ import android.widget.Toast;
 public class MainScreen extends AppCompatActivity {
     static TextView TestBox1;
     static TextView twPicSyncState;
+    public static final String SMBPREFS="preferences.smb";
     private static boolean alreadyRunning=false;
 
 
@@ -55,12 +57,20 @@ public class MainScreen extends AppCompatActivity {
         PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
         this.startService(PicSyncIntent);
 
+        SharedPreferences settings = getSharedPreferences(MainScreen.SMBPREFS, 0);
+        SharedPreferences.Editor editor = settings.edit();
+        String smbservername=settings.getString("smbservername","Not defined");
+        editor.putString("smbservername","192.168.0.1");
+        editor.commit();
+        smbservername=settings.getString("smbservername","Not defined");
+
         /*
         finish();
         System.exit(0);
         return;
 */
         Log.i("MainScreen","onCreate finished");
+
     }
     protected void onResume() {
         Log.i("MainScreen","onResume called");

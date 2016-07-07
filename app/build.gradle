@@ -23,5 +23,5 @@ dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
     testCompile 'junit:junit:4.12'
     compile 'com.android.support:appcompat-v7:23.0.0'
-    compile files('libs/jcifs_1.3.18/jcifs-1.3.18.jar')
+    compile files('src/jcifs_1.3.18/jcifs-1.3.18.jar')
 }

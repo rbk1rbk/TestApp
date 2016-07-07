@@ -3,6 +3,7 @@ package com.rbk.testapp;
 import android.app.IntentService;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -10,7 +11,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
-import java.net.URLConnection;
 import java.net.UnknownHostException;
 
 import jcifs.smb.NtlmPasswordAuthentication;
@@ -112,33 +112,62 @@ public class PicSync extends IntentService {
         }
     }
 
+    private void DoSync(){
+        Log.i("PicSync","DoSync started");
+        Log.i("PicSync","Sync started");
+        MyState="Sync started";
+        PublishState(MyState);
+        try {
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+    }
+        Log.i("PicSync","Sync finished");
+        MyState="Sync finished";
+        PublishState(MyState);
+        Log.i("PicSync","DoSync finished");
+    }
+
     private void handleActionGetState(String param1, String param2) {
         Log.i("PicSync","handleActionGetState: "+MyState);
         PublishState(MyState);
     }
 
     private void handleActionStartSync(String param1, String param2) {
-        MyState="Sync started";
+        MyState="Sync doable";
+        // TODO Prerobit na novy thread?
+        DoSync();
         Log.i("PicSync","handleActionStartSync: "+MyState);
         readTestFile();
         PublishState(MyState);
     }
 
     private void handleActionStopSync(String param1, String param2) {
-        MyState="Sync stopped";
+        MyState="Sync not doable";
         Log.i("PicSync","handleActionStopSync: "+MyState);
         PublishState(MyState);
     }
 
     public void readTestFile() {
+        SharedPreferences settings = getSharedPreferences(MainScreen.SMBPREFS, 0);
+        String smbservername=settings.getString("smbservername","Not defined");
+        String smbuser=settings.getString("smbuser","USER");
+        String smbpasswd=settings.getString("smbpasswd","PASSWORD");
+        Log.i("PicSync","Settings retrieved: "+smbuser+":"+smbpasswd+"@"+smbservername);
+
+
         Log.i("PicSync","readTestFile: start");
-        jcifs.Config.setProperty("jcifs.netbios.wins", "192.168.0.1");
-        NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication(null,null, null);
+//        jcifs.Config.setProperty("jcifs.netbios.wins", "192.168.0.1");
+        jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
+//        NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication(null,null, null);
+        NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication(null,smbuser, smbpasswd);
         SmbFile[] domains = null;
         try {
                 domains = (new SmbFile("smb://NET01/",auth)).listFiles();
             } catch (SmbException e1) {
                 e1.printStackTrace();
+            return;
             } catch(MalformedURLException e) {
             e.printStackTrace();
             Log.i("PicSync", "Domain NOT listed" + e.getMessage());
