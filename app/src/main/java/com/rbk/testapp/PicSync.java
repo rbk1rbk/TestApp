@@ -131,34 +131,58 @@ public class PicSync extends IntentService {
     }
 
     private String[] getStoragePaths(){
+        String canonicalPath, aPath, absolutePath;
         /*
         First, gather all possible "external" storage locations
          */
         final Set<String> storagePathsSet = new HashSet<String>();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             File[] externalMediaDirs = this.getExternalMediaDirs();
+            for (File externalMediaDir : externalMediaDirs){
+                try {
+                    canonicalPath = externalMediaDir.getCanonicalPath();
+                    int needle = TextUtils.indexOf(canonicalPath,"/Android",0);
+                    canonicalPath = TextUtils.substring(canonicalPath,0,needle);
+                    storagePathsSet.add(canonicalPath);
+                } catch (IOException e) {
+                    Log.i("getStoragePaths","externalMediaDir.getAbsolutePath()",e);
+                    e.printStackTrace();
+                }
+            }
         }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            File[] externalMediaDirs = this.getExternalMediaDirs();
-        }
-        storagePathsSet.add(Environment.getExternalStorageDirectory().getAbsolutePath());
+
+        File externalStorageDirectory = Environment.getExternalStorageDirectory();
         try {
-            storagePathsSet.add(Environment.getExternalStorageDirectory().getCanonicalPath());
+            canonicalPath = externalStorageDirectory.getCanonicalPath();
+            storagePathsSet.add(canonicalPath);
         } catch (IOException e) {
             e.printStackTrace();
         }
-        storagePathsSet.add(System.getenv("EXTERNAL_STORAGE"));
+
+        String envExternalStorage=System.getenv("EXTERNAL_STORAGE");
+        try {
+            canonicalPath=new File(envExternalStorage).getCanonicalPath();
+            storagePathsSet.add(canonicalPath);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         final String envSecondaryStorages = System.getenv("SECONDARY_STORAGE");
         if (!TextUtils.isEmpty(envSecondaryStorages)) {
             // All Secondary SD-CARDs splited into array
             final String[] rawSecondaryStorages = envSecondaryStorages.split(File.pathSeparator);
             for (String rawSecondaryStorage : rawSecondaryStorages) {
                 if (!rawSecondaryStorage.toLowerCase().contains("usb"))
+                    try {
+                        canonicalPath=new File(rawSecondaryStorage).getCanonicalPath();
+                        storagePathsSet.add(canonicalPath);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                     storagePathsSet.add(rawSecondaryStorage);
             }
         }
-
-        return null;
+        return storagePathsSet.toArray(new String[storagePathsSet.size()]);
     }
     private String[] getStorageLocations() {
         final Pattern DIR_SEPORATOR = Pattern.compile(":");
@@ -220,71 +244,15 @@ public class PicSync extends IntentService {
                         rv.add(rawSecondaryStorage);
                 }
             }
-
-        final File[] externaldirs1;
-        final File[] externaldirs2;
-        final File[] externaldirs3;
-        final File externaldir;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            boolean tst1, tst2, tst3;
-            File[] path4, path5, path6;
-            File path1, path2, path3, path7;
-
-//api22
-
-            path1 = Environment.getExternalStorageDirectory();
-            tst1 = Environment.isExternalStorageRemovable(path1);
-
-            path2 = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "/");
-            tst2 = Environment.isExternalStorageRemovable(path2);
-
-            path3 = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
-            tst3 = Environment.isExternalStorageEmulated(path3);
-
-            path4 = this.getExternalMediaDirs();
-            path5 = this.getExternalFilesDirs(Environment.DIRECTORY_DCIM);
-            path6 = this.getObbDirs();
-
-            tst1 = Environment.isExternalStorageRemovable(path1);
-            //len aby sa neskoncil pri debugingu if
-        }
-/*
-        String state = Environment.getExternalStorageState();
-        if (!Environment.MEDIA_MOUNTED.equals(state)) {
-            makeToast("Media not mounted");
-            return;
-        }
-        else{
-            makeToast("Media mounted");
-        }
-*/
         return rv.toArray(new String[rv.size()]);
     }
-    private String[] getMediaLocations() {
-    final Set<String> mediaLocationsSet = new HashSet<String>();
-/*
-    String[] storages = getStorageLocations();
-    for (String storagePath : storages) {
-        String[] subdirs = {"DCIM", "Pictures", "Camera", "camera"};
-        for (String subdir : subdirs) {
-            String dir2verify = storagePath + "/" + subdir;
-            if (new File(dir2verify).isDirectory())
-                mediaLocationsSet.add(dir2verify);
-        }
-    }
-*/
-        mediaLocationsSet.add("/sdcard/DCIM");
-        mediaLocationsSet.add("/storage/0D63-F320/DCIM/100ANDRO");
-        mediaLocationsSet.add("/storage/0D63-F320/DCIM/100_CFV5");
-        mediaLocationsSet.add("/storage/0D63-F320/DCIM/Camera");
-        mediaLocationsSet.add("/storage/0D63-F320/DCIM/Video");
-    return mediaLocationsSet.toArray(new String[mediaLocationsSet.size()]);
-}
     final FilenameFilter pictureFileFilter = new FilenameFilter() {
         @Override
         public boolean accept(File dir, String pathname) {
+            String dirname = dir.getAbsolutePath();
             String lowercase = pathname.toLowerCase();
+            if (dirname.contains("/Android/"))
+                return false;
             if (lowercase.startsWith("."))
                 return false;
             if (lowercase.endsWith("jpg"))
@@ -318,23 +286,18 @@ public class PicSync extends IntentService {
         return listOfFiles.toArray(new String[listOfFiles.size()]);
     }
     private void getListOfFilesToSync(){
-/*
-        String[] mediaDirs = getMediaLocations();
-*/
+        String[] mediaDirs = getStoragePaths();
         int numOfFiles = 0;
-/*
+
         for (String mediaDir : mediaDirs){
             String[] mediaFiles=listPictures(mediaDir);
             numOfFiles+=mediaFiles.length;
-*/
 /*
             File path=new File(mediaDir);
             File[] filelist = path.listFiles(pictureFileFilter);
             numOfFiles+=filelist.length;
 */
-/*
         }
-*/
 /*
 
         try {
@@ -380,9 +343,8 @@ public class PicSync extends IntentService {
         e.printStackTrace();
     }
     */
-        getStoragePaths();
 //        getStorageLocations();
-//        getListOfFilesToSync();
+        getListOfFilesToSync();
 //        makeToast("PicSync: Sync started");
         PublishState("Sync in progress");
 
