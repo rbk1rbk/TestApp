@@ -1,95 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+
+<android.support.design.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingBottom="@dimen/activity_vertical_margin"
-    android:paddingLeft="@dimen/activity_horizontal_margin"
-    android:paddingRight="@dimen/activity_horizontal_margin"
-    android:paddingTop="@dimen/activity_vertical_margin"
+    android:fitsSystemWindows="true"
+    android:theme="@style/AppTheme.NoActionBar"
     tools:context="com.rbk.testapp.MainScreen">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <android.support.design.widget.AppBarLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        android:id="@+id/TestBox1" />
+        android:theme="@style/AppTheme.AppBarOverlay">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="PicSync state:"
-        android:id="@+id/twPicSyncStateLabel"
-        android:layout_below="@+id/TestBox1"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"/>
+        <android.support.v7.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="?attr/colorPrimary"
+            app:popupTheme="@style/AppTheme.PopupOverlay"/>
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Unknown"
-        android:id="@+id/twPicSyncState"
-        android:layout_alignTop="@+id/twPicSyncStateLabel"
-        android:layout_toRightOf="@+id/twPicSyncStateLabel"
-        android:layout_toEndOf="@+id/twPicSyncStateLabel"
-        android:layout_marginLeft="10dp"
-        android:layout_marginStart="10dp" />
 
-    <EditText
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:inputType="text"
-        android:text="guest"
-        android:ems="10"
-        android:id="@+id/txsmbUser"
-        android:layout_below="@+id/twPicSyncStateLabel"
-        android:layout_toRightOf="@+id/twsmbUser"
-        android:layout_toEndOf="@+id/twsmbUser"
-        android:layout_marginTop="25dp"/>
+    </android.support.design.widget.AppBarLayout>
 
-    <EditText
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:inputType="textPassword"
-        android:ems="10"
-        android:id="@+id/txsmbPWD"
-        android:labelFor="@id/txsmbPWD"
-        android:layout_below="@+id/twsmbUser"
-        android:layout_toRightOf="@+id/twPicSyncStateLabel"
-        android:layout_toEndOf="@+id/twPicSyncStateLabel"/>
+    <include layout="@layout/activity_content"/>
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textAppearance="?android:attr/textAppearanceMedium"
-        android:text="SMB User: "
-        android:id="@+id/twsmbUser"
-        android:layout_marginTop="37dp"
-        android:layout_below="@+id/twPicSyncStateLabel"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:labelFor="@id/txsmbUser"/>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textAppearance="?android:attr/textAppearanceMedium"
-        android:text="SMB Pwd:"
-        android:id="@+id/twsmbPWD"
-        android:layout_alignBaseline="@+id/txsmbPWD"
-        android:layout_alignBottom="@+id/txsmbPWD"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"/>
-
-    <Button
-        style="?android:attr/buttonStyleSmall"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Save"
-        android:id="@+id/btnSaveSMB"
-        android:layout_below="@+id/txsmbPWD"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:onClick="btnSaveOnClickListener"/>
-
-</RelativeLayout>
+</android.support.design.widget.CoordinatorLayout>

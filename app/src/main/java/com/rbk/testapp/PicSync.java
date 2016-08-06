@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.UnknownHostException;
+import java.util.Collections;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -30,6 +32,7 @@ import jcifs.smb.NtlmPasswordAuthentication;
 import jcifs.smb.SmbException;
 import jcifs.smb.SmbFile;
 import jcifs.smb.SmbFileInputStream;
+import jcifs.smb.SmbFileOutputStream;
 
 /**
  * An {@link IntentService} subclass for handling asynchronous task requests in
@@ -49,7 +52,17 @@ public class PicSync extends IntentService {
     static final String ACTION_START_SYNC = "com.rbk.testapp.PicSync.action.Start";
     static final String ACTION_STOP_SYNC = "com.rbk.testapp.PicSync.action.Stop";
     static final String ACTION_START_SYNC_RESTART = "com.rbk.testapp.PicSync.action.Resync";
+    static String smblocalhostname = "testovacimobil";
+    static String picSyncLogFile = "testapp."+smblocalhostname+".log";
 
+    static String smbservername=null;
+    static String smbuser=null;
+    static String smbpasswd=null;
+    static String smbshare=null;
+    static String smbshareurl=null;
+    NtlmPasswordAuthentication auth=null;
+
+    Date lastCopiedImageTimestamp;
 
     // TODO: Rename parameters
     static final String EXTRA_PARAM1 = "com.rbk.testapp.extra.PARAM1";
@@ -152,13 +165,14 @@ public class PicSync extends IntentService {
         }
 
         File externalStorageDirectory = Environment.getExternalStorageDirectory();
-        try {
-            canonicalPath = externalStorageDirectory.getCanonicalPath();
-            storagePathsSet.add(canonicalPath);
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (!Environment.isExternalStorageEmulated()) {
+            try {
+                canonicalPath = externalStorageDirectory.getCanonicalPath();
+                storagePathsSet.add(canonicalPath);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
-
         String envExternalStorage=System.getenv("EXTERNAL_STORAGE");
         try {
             canonicalPath=new File(envExternalStorage).getCanonicalPath();
@@ -179,7 +193,6 @@ public class PicSync extends IntentService {
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
-                    storagePathsSet.add(rawSecondaryStorage);
             }
         }
         return storagePathsSet.toArray(new String[storagePathsSet.size()]);
@@ -249,10 +262,10 @@ public class PicSync extends IntentService {
     final FilenameFilter pictureFileFilter = new FilenameFilter() {
         @Override
         public boolean accept(File dir, String pathname) {
-            String dirname = dir.getAbsolutePath();
+            String dirname = dir.getAbsolutePath().toLowerCase();
             String lowercase = pathname.toLowerCase();
-            if (dirname.contains("/Android/"))
-                return false;
+            String fullpath=dirname+"/"+lowercase;
+
             if (lowercase.startsWith("."))
                 return false;
             if (lowercase.endsWith("jpg"))
@@ -261,9 +274,41 @@ public class PicSync extends IntentService {
                 return true;
             if (lowercase.endsWith("png"))
                 return true;
+/*
             if (lowercase.endsWith("raw"))
                 return true;
+*/
+            if (lowercase.endsWith("mp4"))
+                return true;
+/*
+            if (lowercase.endsWith("mpg"))
+                return true;
+            if (lowercase.endsWith("avi"))
+                return true;
+*/
+/*
+            File f=new File(pathname);
+            boolean aaa=f.lastModified() > 0;
+*/
             return new File(dir.getAbsolutePath()+"/"+pathname).isDirectory();
+        }
+    };
+
+    final FilenameFilter pictureFolderFilter = new FilenameFilter() {
+        @Override
+        public boolean accept(File dir, String pathname) {
+            String dirname = dir.getAbsolutePath().toLowerCase();
+            String lowercase = pathname.toLowerCase();
+            String fullpath=dirname+"/"+lowercase;
+            File fullpathFile=new File(dir.getAbsolutePath()+"/"+pathname);
+            if (!fullpathFile.isDirectory())
+                return false;
+            if (fullpath.startsWith("."))
+                return false;
+            if (fullpath.contains("images") || fullpath.contains("dcim") || fullpath.contains("pictures") || fullpath.contains("video"))
+                return true;
+            else
+                return false;
         }
     };
     String[] listPictures(String dir){
@@ -274,9 +319,7 @@ public class PicSync extends IntentService {
         for (File entry : filelist ) {
             if (entry.isDirectory()) {
                 filesToAddTolistOfFiles = listPictures(entry.getAbsolutePath());
-                for (String fileToAddTolistOfFiles : filesToAddTolistOfFiles) {
-                    listOfFiles.add(fileToAddTolistOfFiles);
-                }
+                Collections.addAll(listOfFiles, filesToAddTolistOfFiles);
             }
             else {
                 listOfFiles.add(entry.toString());
@@ -285,12 +328,33 @@ public class PicSync extends IntentService {
 
         return listOfFiles.toArray(new String[listOfFiles.size()]);
     }
+    private String[] getMediaPaths(String storagePath){
+        Set<String> mediaPathsSet = new HashSet<String>();
+        File[] filelist = new File(storagePath).listFiles(pictureFolderFilter);
+        if (filelist == null)
+            return null;
+        for (File entry : filelist) {
+            if (entry.isDirectory()){
+                getMediaPaths(entry.getAbsolutePath());
+            }
+            mediaPathsSet.add(entry.getAbsolutePath());
+        }
+        return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
+    }
+    private String[] getMediaPaths(String[] storagePaths){
+        Set<String> mediaPathsSet = new HashSet<String>();
+        for (String storagePath : storagePaths) {
+            Collections.addAll(mediaPathsSet, getMediaPaths(storagePath));
+        }
+        return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
+    }
     private void getListOfFilesToSync(){
-        String[] mediaDirs = getStoragePaths();
+        String[] storagePaths = getStoragePaths();
+        String[] mediaPaths = getMediaPaths(storagePaths);
         int numOfFiles = 0;
 
-        for (String mediaDir : mediaDirs){
-            String[] mediaFiles=listPictures(mediaDir);
+        for (String mediaPath : mediaPaths){
+            String[] mediaFiles=listPictures(mediaPath);
             numOfFiles+=mediaFiles.length;
 /*
             File path=new File(mediaDir);
@@ -326,8 +390,8 @@ public class PicSync extends IntentService {
     } catch (java.io.IOException e) {
         e.printStackTrace();
     }
-        makeToast("Found " + numOfFiles + " files in "+ " media dirs.");
 */
+        makeToast("Found " + numOfFiles + " files in "+mediaPaths.length+ " media dirs.");
     }
     public void StopSync() {
         Log.i("PicSync", "StopSync()");
@@ -348,6 +412,8 @@ public class PicSync extends IntentService {
 //        makeToast("PicSync: Sync started");
         PublishState("Sync in progress");
 
+        saveLastCopiedImageTimestamp();
+        writeLogFile("");
         readTestFile();
         Log.i("PicSync","Sync finished");
         PublishState("Sync finished");
@@ -392,38 +458,71 @@ public class PicSync extends IntentService {
         }
     }
 
-    public void readTestFile() {
+    private void saveLastCopiedImageTimestamp(Date timestamp){
+        lastCopiedImageTimestamp=timestamp;
+        SharedPreferences settings = getSharedPreferences(MainScreen.prefsPicSyncPREFS, 0);
+        SharedPreferences.Editor editor = settings.edit();
+        editor.putString(MainScreen.prefsLITS,Long.valueOf(timestamp.getTime()).toString());
+        editor.commit();
+    }
+    private void saveLastCopiedImageTimestamp(){
+        saveLastCopiedImageTimestamp(new Date());
+    }
+    private void establishSMB(){
         SharedPreferences settings = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
-        String smbservername=settings.getString(MainScreen.prefsSMBSRV,"192.168.0.1");
-        String smbuser=settings.getString(MainScreen.prefsSMBUSER,"");
-        String smbpasswd=settings.getString(MainScreen.prefsSMBPWD,"PASSWORD");
+        smbservername=settings.getString(MainScreen.prefsSMBSRV,"192.168.0.1");
+        smbuser=settings.getString(MainScreen.prefsSMBUSER,"");
+        smbpasswd=settings.getString(MainScreen.prefsSMBPWD,"PASSWORD");
+        smbshare=settings.getString(MainScreen.prefsSMBSHARE,smbuser);
+        jcifs.Config.setProperty("jcifs.netbios.hostname", smblocalhostname);
+        smbshareurl="smb://"+smbservername+"/"+smbshare+"/";
         Log.i("PicSync","Settings retrieved: "+smbuser+":"+smbpasswd+"@"+smbservername);
-
-
-        Log.i("PicSync","readTestFile: start");
-//        jcifs.Config.setProperty("jcifs.netbios.wins", "192.168.0.1");
         jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
-//        NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication(null,null, null);
-        NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication(null,smbuser, smbpasswd);
+        if (auth==null)
+            auth = new NtlmPasswordAuthentication(null,smbuser, smbpasswd);
         SmbFile[] domains = null;
         try {
-                domains = (new SmbFile("smb://NET01/",auth)).listFiles();
-            } catch (SmbException e1) {
-                e1.printStackTrace();
-                makeToast("PicSync: connectivity issue: " + e1.getMessage());
-
+            domains = (new SmbFile(smbshareurl,auth)).listFiles();
+        } catch (SmbException|MalformedURLException e) {
+            e.printStackTrace();
+            makeToast("PicSync: connectivity issue: " + e.getMessage());
             return;
-            } catch(MalformedURLException e) {
-                e.printStackTrace();
-                Log.i("PicSync", "Domain NOT listed" + e.getMessage());
-                return;
         }
+
+    }
+    private void writeLogFile(String message){
+        SmbFile smbLogFile;
+        SmbFileOutputStream smbLogFileOutputStream;
+        establishSMB();
+        try{
+            smbLogFile=new SmbFile(smbshareurl+"/"+picSyncLogFile,auth);
+//            smbLogFile.setAttributes();
+            smbLogFileOutputStream= (SmbFileOutputStream) smbLogFile.getOutputStream();
+        }catch (IOException e){
+            e.printStackTrace();
+            return;
+        }
+/*
+        try {
+            smbLogFile.createNewFile();
+        } catch (SmbException e) {
+            e.printStackTrace();
+        }
+*/
+        try {
+            smbLogFileOutputStream.write(Long.valueOf(lastCopiedImageTimestamp.getTime()).toString().getBytes());
+            smbLogFileOutputStream.close();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+    public void readTestFile() {
+        establishSMB();
         SmbFile sfile;
         SmbFileInputStream in;
         try {
             fileurl="smb://"+smbservername+"/testexport/somefile.txt";
             Log.i("PicSync","Opening file: "+fileurl);
-//            in = new SmbFileInputStream(new SmbFile("smb://192.168.0.1/testexport/somefile.txt"),auth);
             sfile = new SmbFile(fileurl,auth);
             Log.i("PicSync","File opened");
             makeToast("PicSync: " + PicSync.fileurl + " opened");
@@ -433,6 +532,7 @@ public class PicSync extends IntentService {
             makeToast("PicSync: File NOT opened " + e.getMessage());
             return;
         }
+
         try {
             in=new SmbFileInputStream(sfile);
         }catch(MalformedURLException e) {

@@ -11,20 +11,25 @@ import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 public class MainScreen extends AppCompatActivity {
-    static TextView TestBox1;
     static TextView twPicSyncState;
     public static final String prefsSMBPREFS="preferences.smb";
     public static final String prefsSMBUSER="smbuser";
     public static final String prefsSMBPWD="smbpwd";
     public static final String prefsSMBSRV="smbsrv";
+    public static final String prefsSMBSHARE="smbshare";
+    public static final String prefsPicSyncPREFS="preferences.picsync";
+    public static final String prefsLITS="lastImageTimestamp";
+
     private static boolean alreadyRunning=false;
     static Button button;
     static EditText txsmbUser;
@@ -46,6 +51,29 @@ public class MainScreen extends AppCompatActivity {
         }
     };
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.menu_settings, menu);
+        return true;
+    }
+   @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+
+        //noinspection SimplifiableIfStatement
+        if (id == R.id.action_settings) {
+            Intent myIntent = new Intent(this, SettingsActivity.class);
+            this.startActivity(myIntent);
+            return true;
+        }
+
+        return super.onOptionsItemSelected(item);
+    }
+
     protected void DrawMainScreen(){
         button = (Button) findViewById(R.id.btnSaveSMB);
         txsmbUser = (EditText) findViewById(R.id.txsmbUser);
@@ -54,6 +82,10 @@ public class MainScreen extends AppCompatActivity {
         SharedPreferences settings = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
         txsmbUser.setText(settings.getString(MainScreen.prefsSMBUSER,"guest"));
         txsmbPWD.setText(settings.getString(MainScreen.prefsSMBPWD,"passw0rd"));
+
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+
     };
 
     public void btnSaveOnClickListener(View v) {
@@ -81,7 +113,6 @@ public class MainScreen extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main_screen);
         Log.i("MainScreen", "onCreate called");
-        TestBox1 = (TextView) findViewById(R.id.TestBox1);
         twPicSyncState = (TextView) findViewById(R.id.twPicSyncState);
         if (alreadyRunning) {
             Log.i("MainScreen", "Already running, return");
@@ -121,11 +152,6 @@ public class MainScreen extends AppCompatActivity {
         super.onPause();
         unregisterReceiver(MainScreenReceiver);
     }
-    public static void SetState(String state){
-        alreadyRunning=false;
-        TestBox1.setText(state);
-    }
-
     @Override
     public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
         switch (requestCode) {

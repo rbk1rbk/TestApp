@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:app="http://schemas.android.com/apk/res-auto"
+                xmlns:tools="http://schemas.android.com/tools"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:paddingBottom="@dimen/activity_vertical_margin"
+                android:paddingLeft="@dimen/activity_horizontal_margin"
+                android:paddingRight="@dimen/activity_horizontal_margin"
+                android:paddingTop="@dimen/activity_vertical_margin"
+                app:layout_behavior="@string/appbar_scrolling_view_behavior"
+                tools:context="com.rbk.testapp.MainScreen"
+                tools:showIn="@layout/activity_main_screen">
+
+    <TextView
+        android:id="@+id/twPicSyncStateLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:text="PicSync state:"/>
+
+    <TextView
+        android:id="@+id/twPicSyncState"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignTop="@+id/twPicSyncStateLabel"
+        android:layout_marginLeft="10dp"
+        android:layout_marginStart="10dp"
+        android:layout_toEndOf="@+id/twPicSyncStateLabel"
+        android:layout_toRightOf="@+id/twPicSyncStateLabel"
+        android:text="Unknown"/>
+
+    <EditText
+        android:id="@+id/txsmbUser"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/twPicSyncStateLabel"
+        android:layout_marginTop="25dp"
+        android:layout_toEndOf="@+id/twsmbUser"
+        android:layout_toRightOf="@+id/twsmbUser"
+        android:ems="10"
+        android:inputType="text"
+        android:text="guest"/>
+
+    <EditText
+        android:id="@+id/txsmbPWD"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/twsmbUser"
+        android:layout_toEndOf="@+id/twPicSyncStateLabel"
+        android:layout_toRightOf="@+id/twPicSyncStateLabel"
+        android:ems="10"
+        android:inputType="textPassword"
+        android:labelFor="@id/txsmbPWD"/>
+
+    <TextView
+        android:id="@+id/twsmbUser"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_below="@+id/twPicSyncStateLabel"
+        android:layout_marginTop="32dp"
+        android:labelFor="@id/txsmbUser"
+        android:text="SMB User: "
+        android:textAppearance="?android:attr/textAppearanceMedium"/>
+
+    <TextView
+        android:id="@+id/twsmbPWD"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignBaseline="@+id/txsmbPWD"
+        android:layout_alignBottom="@+id/txsmbPWD"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:text="SMB Pwd:"
+        android:textAppearance="?android:attr/textAppearanceMedium"/>
+
+    <Button
+        android:id="@+id/btnSaveSMB"
+        style="?android:attr/buttonStyleSmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_below="@+id/txsmbPWD"
+        android:onClick="btnSaveOnClickListener"
+        android:text="Save"/>
+
+</RelativeLayout>
