@@ -16,12 +16,12 @@
     <string name="pref_default_display_name">John Smith</string>
 
     <string name="pref_title_add_friends_to_messages">Add friends to messages</string>
-    <string-array name="pref_example_list_titles">
-        <item>Always</item>
-        <item>When possible</item>
-        <item>Never</item>
+    <string-array name="pref_when2sync_titles">
+        <item>At home</item>
+        <item>At home and charging</item>
+        <item>Manual only</item>
     </string-array>
-    <string-array name="pref_example_list_values">
+    <string-array name="pref_when2sync_values">
         <item>1</item>
         <item>0</item>
         <item>-1</item>

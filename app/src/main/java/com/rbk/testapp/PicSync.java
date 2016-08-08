@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
+import android.preference.PreferenceManager;
 import android.support.v4.content.ContextCompat;
 import android.text.TextUtils;
 import android.util.Log;
@@ -469,13 +470,23 @@ public class PicSync extends IntentService {
         saveLastCopiedImageTimestamp(new Date());
     }
     private void establishSMB(){
+/*
         SharedPreferences settings = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
         smbservername=settings.getString(MainScreen.prefsSMBSRV,"192.168.0.1");
         smbuser=settings.getString(MainScreen.prefsSMBUSER,"");
         smbpasswd=settings.getString(MainScreen.prefsSMBPWD,"PASSWORD");
         smbshare=settings.getString(MainScreen.prefsSMBSHARE,smbuser);
-        jcifs.Config.setProperty("jcifs.netbios.hostname", smblocalhostname);
+*/
+        if (auth != null)
+            return;
+        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
+        smbservername=settings.getString("prefsSMBSRV","192.168.0.1");
+        smbuser=settings.getString("prefsSMBUSER","");
+        smbpasswd=settings.getString("prefsSMBPWD","PASSWORD");
+        smbshare=settings.getString("prefsSMBSHARE",smbuser);
         smbshareurl="smb://"+smbservername+"/"+smbshare+"/";
+
+        jcifs.Config.setProperty("jcifs.netbios.hostname", smblocalhostname);
         Log.i("PicSync","Settings retrieved: "+smbuser+":"+smbpasswd+"@"+smbservername);
         jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
         if (auth==null)

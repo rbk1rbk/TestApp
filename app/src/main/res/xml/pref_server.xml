@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <EditTextPreference
+        android:defaultValue="192.168.0.1"
+        android:inputType="textNoSuggestions"
+        android:key="prefsSMBSRV"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:title="CIFS URI "/>
+
+    <EditTextPreference
+        android:defaultValue="/share/"
+        android:inputType="textNoSuggestions"
+        android:key="prefsSMBSHARE"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:title="CIFS URI "/>
+
+    <Preference
+        android:defaultValue="smb://server/share"
+        android:title="Share URL:"/>
+
+    <EditTextPreference
+        android:defaultValue="guest"
+        android:inputType="textNoSuggestions"
+        android:key="prefsSMBUSER"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:title="CIFS username"/>
+
+    <EditTextPreference
+        android:defaultValue=""
+        android:inputType="textPassword"
+        android:key="prefsSMBPWD"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:title="CIFS password"/>
+
+</PreferenceScreen>
