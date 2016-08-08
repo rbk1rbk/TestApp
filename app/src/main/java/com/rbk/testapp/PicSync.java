@@ -479,6 +479,7 @@ public class PicSync extends IntentService {
 */
         if (auth != null)
             return;
+
         SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
         smbservername=settings.getString("prefsSMBSRV","192.168.0.1");
         smbuser=settings.getString("prefsSMBUSER","");
