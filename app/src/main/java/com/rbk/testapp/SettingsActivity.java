@@ -22,7 +22,11 @@ import android.preference.RingtonePreference;
 import android.support.v4.app.NavUtils;
 import android.support.v7.app.ActionBar;
 import android.text.TextUtils;
+import android.view.ContextMenu;
 import android.view.MenuItem;
+
+import com.google.android.gms.appindexing.AppIndex;
+import com.google.android.gms.common.api.GoogleApiClient;
 
 import java.util.List;
 
@@ -31,7 +35,7 @@ import java.util.List;
  * handset devices, settings are presented as a single list. On tablets,
  * settings are split by category, with category headers shown to the left of
  * the list of settings.
- * <p>
+ * <p/>
  * See <a href="http://developer.android.com/design/patterns/settings.html">
  * Android Design: Settings</a> for design guidelines and the <a
  * href="http://developer.android.com/guide/topics/ui/settings.html">Settings
@@ -81,13 +85,12 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
                     }
                 }
 
-            } else if (preference instanceof EditTextPreference){
+            } else if (preference instanceof EditTextPreference) {
                 if (TextUtils.equals(preference.getKey(), "prefsSMBPWD"))
                     preference.setSummary("********");
                 else
                     preference.setSummary(stringValue);
-            }
-            else {
+            } else {
                 // For all other preferences, set the summary to the value's
                 // simple string representation.
                 preference.setSummary(stringValue);
@@ -95,6 +98,11 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             return true;
         }
     };
+    /**
+     * ATTENTION: This was auto-generated to implement the App Indexing API.
+     * See https://g.co/AppIndexing/AndroidStudio for more information.
+     */
+    private GoogleApiClient client;
 
     /**
      * Helper method to determine if the device has an extra-large screen. For
@@ -130,6 +138,9 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setupActionBar();
+        // ATTENTION: This was auto-generated to implement the App Indexing API.
+        // See https://g.co/AppIndexing/AndroidStudio for more information.
+        client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
     }
 
     /**
@@ -153,6 +164,13 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             return true;
         }
         return super.onMenuItemSelected(featureId, item);
+    }
+
+	@Override
+    public boolean onContextItemSelected(MenuItem menuItem) {
+		ContextMenu.ContextMenuInfo cmi = menuItem.getMenuInfo();
+		cmi = menuItem.getMenuInfo();
+        return true;
     }
 
     /**
@@ -206,7 +224,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
 /*
             checkBoxPreference.setChecked(false);
 */
-            PreferenceScreen targetScreen = (PreferenceScreen)findPreference("pref_local_dirs_screen");
+            PreferenceScreen targetScreen = (PreferenceScreen) findPreference("pref_local_dirs_screen");
             targetScreen.addPreference(checkBoxPreference);
 /*
             bindPreferenceSummaryToValue(findPreference("pref_directory_1"));
