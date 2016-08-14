@@ -400,17 +400,7 @@ public class PicSync extends IntentService {
 
     public void DoSync(){
         Log.i("PicSync","Sync started");
-        /*
-        try {
-            Thread.sleep(10000);
-        } catch (InterruptedException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-    }
-    */
-//        getStorageLocations();
         getListOfFilesToSync();
-//        makeToast("PicSync: Sync started");
         PublishState("Sync in progress");
 
         saveLastCopiedImageTimestamp();
@@ -418,7 +408,6 @@ public class PicSync extends IntentService {
         readTestFile();
         Log.i("PicSync","Sync finished");
         PublishState("Sync finished");
-//        makeToast("PicSync: Sync finished");
     }
 
     private void handleActionGetState(String param1, String param2) {
@@ -481,14 +470,16 @@ public class PicSync extends IntentService {
             return;
 
         SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
-        smbservername=settings.getString("prefsSMBSRV","192.168.0.1");
+        smbservername = settings.getString("prefsSMBSRV", "");
         smbuser=settings.getString("prefsSMBUSER","");
         smbpasswd=settings.getString("prefsSMBPWD","PASSWORD");
         smbshare=settings.getString("prefsSMBSHARE",smbuser);
+/*
         smbshareurl="smb://"+smbservername+"/"+smbshare+"/";
+*/
+        smbshareurl = settings.getString("prefsTGTURI", "");
 
         jcifs.Config.setProperty("jcifs.netbios.hostname", smblocalhostname);
-        Log.i("PicSync","Settings retrieved: "+smbuser+":"+smbpasswd+"@"+smbservername);
         jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
         if (auth==null)
             auth = new NtlmPasswordAuthentication(null,smbuser, smbpasswd);

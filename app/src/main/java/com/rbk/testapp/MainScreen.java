@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
@@ -75,13 +74,18 @@ public class MainScreen extends AppCompatActivity {
     }
 
     protected void DrawMainScreen(){
-        button = (Button) findViewById(R.id.btnSaveSMB);
+/*
+
         txsmbUser = (EditText) findViewById(R.id.txsmbUser);
         txsmbPWD = (EditText) findViewById(R.id.txsmbPWD);
+*/
+        button = (Button) findViewById(R.id.btnSaveSMB);
+/*
 
         SharedPreferences settings = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
         txsmbUser.setText(settings.getString(MainScreen.prefsSMBUSER,"guest"));
         txsmbPWD.setText(settings.getString(MainScreen.prefsSMBPWD,"passw0rd"));
+*/
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -96,11 +100,13 @@ public class MainScreen extends AppCompatActivity {
     }
 
     private void handlebtnSaveonClick(){
+/*
         SharedPreferences prefs = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
         SharedPreferences.Editor editor = prefs.edit();
         editor.putString(MainScreen.prefsSMBUSER,txsmbUser.getText().toString());
         editor.putString(MainScreen.prefsSMBPWD,txsmbPWD.getText().toString());
         editor.commit();
+*/
 //        this.startService(new Intent(MainScreen.this,PicSync.class).setAction(PicSync.ACTION_START_SYNC));
         Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
         PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);

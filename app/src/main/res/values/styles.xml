@@ -14,4 +14,9 @@
         <item name="windowNoTitle">true</item>
     </style>
 
+    <style name="AppTheme.WithActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">false</item>
+    </style>
+
 </resources>

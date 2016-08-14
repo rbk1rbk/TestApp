@@ -4,6 +4,7 @@ package com.rbk.testapp;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
@@ -25,9 +26,6 @@ import android.text.TextUtils;
 import android.view.ContextMenu;
 import android.view.MenuItem;
 
-import com.google.android.gms.appindexing.AppIndex;
-import com.google.android.gms.common.api.GoogleApiClient;
-
 import java.util.List;
 
 /**
@@ -46,6 +44,38 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
      * A preference value change listener that updates the preference's summary
      * to reflect its new value.
      */
+
+    @Override
+    public void startActivity(Intent intent) {
+        String a = intent.getComponent().getClass().toString();
+        String b = intent.getComponent().getClassName();
+        String c = intent.getComponent().getShortClassName();
+/*
+        String c = intent.getClass().toString();
+        String d = intent.getType().toString();
+        String e = intent.getAction().toString();
+*/
+        if (intent.getComponent().getShortClassName().equals(".CIFSbrowser")) {
+            intent.putExtra("path", "smb://");
+            super.startActivityForResult(intent, 1000);
+        } else {
+            super.startActivity(intent);
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int reqCode, int resCode, Intent data) {
+        if ((reqCode == 1000) & (resCode == 0) & (data != null)) {
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putString("prefsTGTURI", data.getStringExtra("path"));
+            editor.commit();
+            finish();
+            startActivity(getIntent());
+        }
+    }
+
+
     private static Preference.OnPreferenceChangeListener sBindPreferenceSummaryToValueListener = new Preference.OnPreferenceChangeListener() {
         @Override
         public boolean onPreferenceChange(Preference preference, Object value) {
@@ -98,11 +128,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             return true;
         }
     };
-    /**
-     * ATTENTION: This was auto-generated to implement the App Indexing API.
-     * See https://g.co/AppIndexing/AndroidStudio for more information.
-     */
-    private GoogleApiClient client;
+
 
     /**
      * Helper method to determine if the device has an extra-large screen. For
@@ -138,9 +164,6 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setupActionBar();
-        // ATTENTION: This was auto-generated to implement the App Indexing API.
-        // See https://g.co/AppIndexing/AndroidStudio for more information.
-        client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
     }
 
     /**
@@ -200,11 +223,6 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
                 || PreferenceFragmentCIFS.class.getName().equals(fragmentName)
                 || PreferenceFragmentNotification.class.getName().equals(fragmentName);
     }
-
-    /**
-     * This fragment shows general preferences only. It is used when the
-     * activity is showing a two-pane settings UI.
-     */
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     public static class PreferenceFragmentSync extends PreferenceFragment {
         @Override
@@ -250,16 +268,11 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             addPreferencesFromResource(R.xml.pref_server);
             setHasOptionsMenu(true);
 
-            // Bind the summaries of EditText/List/Dialog/Ringtone preferences
-            // to their values. When their values change, their summaries are
-            // updated to reflect the new value, per the Android Design
-            // guidelines.
             bindPreferenceSummaryToValue(findPreference("prefsSMBSRV"));
-            bindPreferenceSummaryToValue(findPreference("prefsSMBSHARE"));
             bindPreferenceSummaryToValue(findPreference("prefsSMBUSER"));
             bindPreferenceSummaryToValue(findPreference("prefsSMBPWD"));
+            bindPreferenceSummaryToValue(findPreference("prefsTGTURI"));
         }
-
         @Override
         public boolean onOptionsItemSelected(MenuItem item) {
             int id = item.getItemId();

@@ -2,28 +2,6 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
     <EditTextPreference
-        android:defaultValue="192.168.0.1"
-        android:inputType="textNoSuggestions"
-        android:key="prefsSMBSRV"
-        android:maxLines="1"
-        android:selectAllOnFocus="true"
-        android:singleLine="true"
-        android:title="CIFS URI "/>
-
-    <EditTextPreference
-        android:defaultValue="/share/"
-        android:inputType="textNoSuggestions"
-        android:key="prefsSMBSHARE"
-        android:maxLines="1"
-        android:selectAllOnFocus="true"
-        android:singleLine="true"
-        android:title="CIFS URI "/>
-
-    <Preference
-        android:defaultValue="smb://server/share"
-        android:title="Share URL:"/>
-
-    <EditTextPreference
         android:defaultValue="guest"
         android:inputType="textNoSuggestions"
         android:key="prefsSMBUSER"
@@ -41,4 +19,30 @@
         android:singleLine="true"
         android:title="CIFS password"/>
 
+    <EditTextPreference
+        android:defaultValue="192.168.0.1"
+        android:inputType="textNoSuggestions"
+        android:key="prefsSMBSRV"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:title="CIFS server"/>
+
+    <EditTextPreference
+        android:defaultValue="/share/"
+        android:inputType="textNoSuggestions"
+        android:key="prefsTGTURI"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:title="Target folder"/>
+
+    <Preference
+        android:defaultValue="smb://server/share"
+        android:title="Alternatively browse your network">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.rbk.testapp.CIFSbrowser"
+            android:targetPackage="com.rbk.testapp"/>
+    </Preference>
 </PreferenceScreen>

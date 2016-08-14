@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TableLayout xmlns:android="http://schemas.android.com/apk/res/android"
+             android:layout_width="fill_parent"
+             android:layout_height="fill_parent"
+             android:orientation="vertical"
+             android:nestedScrollingEnabled="false"
+             android:rowOrderPreserved="true"
+             android:minHeight="50dp"
+             android:stretchColumns="0">
+
+    <!--
+        android:nestedScrollingEnabled="false"
+    -->
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <android.support.design.widget.AppBarLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:theme="@style/AppTheme.AppBarOverlay">
+
+            <android.support.v7.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                android:background="?attr/colorPrimary"/>
+        </android.support.design.widget.AppBarLayout>
+    </TableRow>
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:minHeight="50dp"
+        android:nestedScrollingEnabled="false"
+        android:longClickable="false"
+        android:visibility="visible"
+        android:transitionGroup="true"
+        android:measureWithLargestChild="true"
+        android:minWidth="50dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="100">
+
+            <Button
+                android:id="@+id/buttonCancel"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_gravity="bottom"
+                android:gravity="center_vertical|center_horizontal"
+                android:text="Cancel"
+                android:layout_weight="0"/>
+
+            <Button
+                android:id="@+id/buttonChoose"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_gravity="bottom"
+                android:gravity="center_vertical|center_horizontal"
+                android:text="Choose"
+                android:layout_weight="0"
+                android:onClick="onBtnSelectClick"/>
+        </LinearLayout>
+    </TableRow>
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:measureWithLargestChild="true">
+
+        <ListView
+            android:layout_span="3"
+            android:id="@android:id/list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:choiceMode="singleChoice"
+            android:drawSelectorOnTop="true"
+            android:scrollingCache="true"
+            android:smoothScrollbar="true"
+            android:theme="@style/AppTheme"
+            android:stackFromBottom="false"
+            android:layout_rowWeight="0"
+            />
+    </TableRow>
+</TableLayout>
