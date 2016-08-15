@@ -15,7 +15,6 @@ import android.preference.CheckBoxPreference;
 import android.preference.EditTextPreference;
 import android.preference.ListPreference;
 import android.preference.Preference;
-import android.preference.PreferenceActivity;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
@@ -28,36 +27,15 @@ import android.view.MenuItem;
 
 import java.util.List;
 
-/**
- * A {@link PreferenceActivity} that presents a set of application settings. On
- * handset devices, settings are presented as a single list. On tablets,
- * settings are split by category, with category headers shown to the left of
- * the list of settings.
- * <p/>
- * See <a href="http://developer.android.com/design/patterns/settings.html">
- * Android Design: Settings</a> for design guidelines and the <a
- * href="http://developer.android.com/guide/topics/ui/settings.html">Settings
- * API Guide</a> for more information on developing a Settings UI.
- */
 public class SettingsActivity extends AppCompatPreferenceActivity {
-    /**
-     * A preference value change listener that updates the preference's summary
-     * to reflect its new value.
-     */
-
     @Override
     public void startActivity(Intent intent) {
-        String a = intent.getComponent().getClass().toString();
-        String b = intent.getComponent().getClassName();
-        String c = intent.getComponent().getShortClassName();
-/*
-        String c = intent.getClass().toString();
-        String d = intent.getType().toString();
-        String e = intent.getAction().toString();
-*/
-        if (intent.getComponent().getShortClassName().equals(".CIFSbrowser")) {
+		String classShortName = intent.getComponent().getShortClassName();
+        if (classShortName.equals(".CIFSbrowser")) {
             intent.putExtra("path", "smb://");
             super.startActivityForResult(intent, 1000);
+        } else if (classShortName.equals(".WiFiPicker")) {
+                super.startActivityForResult(intent, 1001);
         } else {
             super.startActivity(intent);
         }
@@ -69,6 +47,13 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putString("prefsTGTURI", data.getStringExtra("path"));
+            editor.commit();
+            finish();
+            startActivity(getIntent());
+        } else if ((reqCode == 1001) & (resCode == 0) & (data != null)) {
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putString("pref_homewifissid", data.getStringExtra("wifiName"));
             editor.commit();
             finish();
             startActivity(getIntent());

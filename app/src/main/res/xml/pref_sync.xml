@@ -6,13 +6,15 @@
         android:summary="Enable or disable synchronization"
         android:title="Enable / disable sync"/>
 
-    <EditTextPreference
-        android:defaultValue="Not Defined"
-        android:inputType="textNoSuggestions"
-        android:key="pref_homewifissid"
-        android:maxLines="1"
-        android:singleLine="true"
-        android:title="Home WiFi name"/>
+    <Preference
+        android:defaultValue="none"
+        android:title="Home WiFi name"
+        android:key="pref_homewifissid">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.rbk.testapp.WiFiPicker"
+            android:targetPackage="com.rbk.testapp"/>
+    </Preference>
 
     <ListPreference
         android:defaultValue="-1"

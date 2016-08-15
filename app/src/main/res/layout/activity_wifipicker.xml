@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TableLayout xmlns:android="http://schemas.android.com/apk/res/android"
+             android:layout_width="fill_parent"
+             android:layout_height="fill_parent"
+             android:minHeight="50dp"
+             android:nestedScrollingEnabled="false"
+             android:orientation="vertical"
+             android:rowOrderPreserved="true"
+             android:stretchColumns="0">
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <android.support.design.widget.AppBarLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:theme="@style/AppTheme.AppBarOverlay">
+
+            <android.support.v7.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                android:background="?attr/colorPrimary"/>
+        </android.support.design.widget.AppBarLayout>
+    </TableRow>
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:measureWithLargestChild="true">
+
+        <ListView
+            android:id="@android:id/list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_rowWeight="0"
+            android:layout_span="3"
+            android:choiceMode="singleChoice"
+            android:drawSelectorOnTop="true"
+            android:scrollingCache="true"
+            android:smoothScrollbar="true"
+            android:stackFromBottom="false"
+            android:theme="@style/AppTheme"
+            />
+    </TableRow>
+</TableLayout>
