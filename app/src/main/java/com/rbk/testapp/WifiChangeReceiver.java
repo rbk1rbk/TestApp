@@ -12,6 +12,7 @@ import android.net.wifi.WifiManager;
 import android.os.IBinder;
 
 public class WifiChangeReceiver extends BroadcastReceiver {
+	private static boolean queueTrigger=false;
     public WifiChangeReceiver() {
     }
 	WifiWatchdogService wifiWatchdogServiceGW;
@@ -25,6 +26,8 @@ public class WifiChangeReceiver extends BroadcastReceiver {
 			WifiWatchdogService.LocalBinder binder = (WifiWatchdogService.LocalBinder) service;
 			wifiWatchdogServiceGW = binder.getService();
 			WifiWatchdogServiceBound = true;
+			if (queueTrigger)
+				wifiWatchdogServiceGW.wifiChangeTrigger();
 		}
 
 		@Override
@@ -35,7 +38,16 @@ public class WifiChangeReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-		wifiWatchdogServiceGW.wifiChangeTrigger();
+		if (!WifiWatchdogServiceBound) {
+			queueTrigger = true;
+			Intent wifiWatchdogServiceIntent = new Intent(context, WifiWatchdogService.class);
+			context.bindService(wifiWatchdogServiceIntent, wifiWatchdogServiceConnection, Context.BIND_AUTO_CREATE);
+		}
+		else{
+			queueTrigger=false;
+			wifiWatchdogServiceGW.wifiChangeTrigger();
+		}
+
 /*
         Intent PicSyncIntent = new Intent(context, PicSync.class);
         String currentssid = getCurrentSsid(context);
