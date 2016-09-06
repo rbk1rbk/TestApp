@@ -47,6 +47,8 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putString("prefsTGTURI", data.getStringExtra("path"));
+            editor.putString("prefsSMBSRV", data.getStringExtra("servername"));
+            editor.putString("prefsSMBSHARE", data.getStringExtra("sharename"));
             editor.commit();
             finish();
             startActivity(getIntent());
@@ -206,6 +208,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
         return PreferenceFragment.class.getName().equals(fragmentName)
                 || PreferenceFragmentSync.class.getName().equals(fragmentName)
                 || PreferenceFragmentCIFS.class.getName().equals(fragmentName)
+                       || PreferenceFragmentUpload.class.getName().equals(fragmentName)
                 || PreferenceFragmentNotification.class.getName().equals(fragmentName);
     }
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
@@ -253,9 +256,10 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             addPreferencesFromResource(R.xml.pref_server);
             setHasOptionsMenu(true);
 
-            bindPreferenceSummaryToValue(findPreference("prefsSMBSRV"));
             bindPreferenceSummaryToValue(findPreference("prefsSMBUSER"));
             bindPreferenceSummaryToValue(findPreference("prefsSMBPWD"));
+            bindPreferenceSummaryToValue(findPreference("prefsSMBSRV"));
+            bindPreferenceSummaryToValue(findPreference("prefsSMBSHARE"));
             bindPreferenceSummaryToValue(findPreference("prefsTGTURI"));
         }
         @Override
@@ -279,6 +283,26 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
         public void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
             addPreferencesFromResource(R.xml.pref_notification);
+            setHasOptionsMenu(true);
+        }
+
+        @Override
+        public boolean onOptionsItemSelected(MenuItem item) {
+            int id = item.getItemId();
+            if (id == android.R.id.home) {
+                startActivity(new Intent(getActivity(), SettingsActivity.class));
+                return true;
+            }
+            return super.onOptionsItemSelected(item);
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
+    public static class PreferenceFragmentUpload extends PreferenceFragment {
+        @Override
+        public void onCreate(Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            addPreferencesFromResource(R.xml.pref_upload);
             setHasOptionsMenu(true);
         }
 

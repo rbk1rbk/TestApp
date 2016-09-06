@@ -1,13 +1,14 @@
 package com.rbk.testapp;
 
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
-import android.net.wifi.ScanResult;
+import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
@@ -23,16 +24,19 @@ import java.util.List;
 public class WifiWatchdogService extends Service {
 	private static WifiChangeReceiver WCR;
 	private static IntentFilter IF;
+	private static BroadcastReceiver WSR; //WifiScanReceiver
 	private static IBinder myBinder;
 	private static ConnectivityManager cm;
 	private boolean isconnected;
 	private int connType;
 	private WifiManager wifiManager;
+	List<String> wifiSSIDList;
 
 	enum eactionForPicSync {GO, STOP}
 
 	;
 	private eactionForPicSync actionForPicSync = eactionForPicSync.STOP;
+
 
 	public WifiWatchdogService() {
 	}
@@ -60,6 +64,17 @@ public class WifiWatchdogService extends Service {
 		thread.start();
 		Log.i("WifiChangeReceiver", "onCreate: Background thread started");
 		cm = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
+
+		WSR = new BroadcastReceiver() {
+			@Override
+			public void onReceive(Context context, Intent intent) {
+				updateSSIDList();
+				Log.d("WifiWatchdogService", "Wifi Scan Receiver called");
+			}
+		};
+		registerReceiver(WSR, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
+		wifiSSIDList = new ArrayList<String>();
+		wifiSSIDList.clear();
 	}
 
 	public class LocalBinder extends Binder {
@@ -80,18 +95,49 @@ public class WifiWatchdogService extends Service {
 		Log.i("WifiChangeReceiver", "onDestroy: Service done");
 	}
 
-	public String[] getWifiList() {
-		List<String> wifiSSIDList = new ArrayList<String>();
-
-		if (isconnected && connType == ConnectivityManager.TYPE_WIFI) {
+	public boolean startScan() {
+		return true;
 /*
-			final WifiManager wifiManager = (WifiManager) this.getSystemService(Context.WIFI_SERVICE);
+		if (isconnected && connType == ConnectivityManager.TYPE_WIFI) {
+			if (wifiManager.isWifiEnabled()) {
+				wifiManager.startScan();
+				return true;
+			}
+		}
+		return false;
 */
+	}
+
+	private void updateSSIDList() {
+		return;
+/*
+		wifiSSIDList.clear();
+*/
+/*
+		List<ScanResult> wifiList = wifiManager.getScanResults();
+*/
+/*
+		List<WifiConfiguration> wifiList = wifiManager.getConfiguredNetworks();
+		for (WifiConfiguration wifiItem : wifiList) {
+			wifiSSIDList.add(wifiItem.SSID.replaceAll("^\"|\"$", ""));
+		}
+		if (wifiSSIDList.size() == 0) {
+			wifiSSIDList.add("No network in range");
+		}
+*/
+	}
+
+	public String[] getWifiList() {
+/*
+		if (isconnected && connType == ConnectivityManager.TYPE_WIFI) {
+			wifiManager = (WifiManager) this.getSystemService(Context.WIFI_SERVICE);
 			if (!wifiManager.isWifiEnabled())
 				return null;
+*/
 /*
 				return new String[]{"Wifi disabled"};
-*/
+*//*
+
 			wifiManager.startScan();
 			List<ScanResult> wifiList = wifiManager.getScanResults();
 			for (ScanResult wifiItem : wifiList) {
@@ -100,6 +146,15 @@ public class WifiWatchdogService extends Service {
 			if (wifiSSIDList.size() == 0) {
 				wifiSSIDList.add("No network in range");
 			}
+		}
+*/
+		List<WifiConfiguration> wifiList = wifiManager.getConfiguredNetworks();
+		wifiSSIDList.clear();
+		for (WifiConfiguration wifiItem : wifiList) {
+			wifiSSIDList.add(wifiItem.SSID.replaceAll("^\"|\"$", ""));
+		}
+		if (wifiSSIDList.size() == 0) {
+			wifiSSIDList.add("No network in range");
 		}
 		return wifiSSIDList.toArray(new String[wifiSSIDList.size()]);
 	}

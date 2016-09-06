@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:layout_behavior="@string/appbar_scrolling_view_behavior"
+    tools:context="com.rbk.testapp.FolderPicker"
+    tools:showIn="@layout/activity_folder_picker">
+
+    <ListView
+        android:layout_span="3"
+        android:id="@android:id/list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:choiceMode="singleChoice"
+        android:drawSelectorOnTop="true"
+        android:scrollingCache="true"
+        android:smoothScrollbar="true"
+        android:theme="@style/AppTheme"
+        android:stackFromBottom="false"
+        android:layout_rowWeight="0"
+        />
+</LinearLayout>

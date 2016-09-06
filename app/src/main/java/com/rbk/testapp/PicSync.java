@@ -6,12 +6,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
@@ -23,15 +25,20 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 import jcifs.smb.NtlmPasswordAuthentication;
 import jcifs.smb.SmbException;
 import jcifs.smb.SmbFile;
+import jcifs.smb.SmbFileFilter;
 import jcifs.smb.SmbFileInputStream;
 import jcifs.smb.SmbFileOutputStream;
 
@@ -48,11 +55,15 @@ public class PicSync extends IntentService {
 
     private static String MyState = "Not running";
     private static Context ParentContext;
+	private static IBinder myBinder;
 
     static final String ACTION_GET_STATE = "com.rbk.testapp.PicSync.action.GetState";
     static final String ACTION_START_SYNC = "com.rbk.testapp.PicSync.action.Start";
     static final String ACTION_STOP_SYNC = "com.rbk.testapp.PicSync.action.Stop";
     static final String ACTION_START_SYNC_RESTART = "com.rbk.testapp.PicSync.action.Resync";
+	static final String ACTION_BROWSE_CIFS = "com.rbk.testapp.PicSync.action.BrowseCIFS";
+	static final String ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS = "com.rbk.testapp.PicSync.action.addMediaFolders";
+
     static String smblocalhostname = "testovacimobil";
     static String picSyncLogFile = "testapp."+smblocalhostname+".log";
 
@@ -61,9 +72,12 @@ public class PicSync extends IntentService {
     static String smbpasswd=null;
     static String smbshare=null;
     static String smbshareurl=null;
-    NtlmPasswordAuthentication auth=null;
+	static NtlmPasswordAuthentication auth = null;
 
-    Date lastCopiedImageTimestamp;
+	static final int cifsAllowedBrowsables = SmbFile.TYPE_WORKGROUP | SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
+	static final int cifsAllowedBrowsablesForUp = SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
+	private List values;
+	Date lastCopiedImageTimestamp;
 
     // TODO: Rename parameters
     static final String EXTRA_PARAM1 = "com.rbk.testapp.extra.PARAM1";
@@ -83,19 +97,142 @@ public class PicSync extends IntentService {
     @Override
     public void onCreate(){
         super.onCreate();
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
+		Log.i("PicSync", "onCreate");
+		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
             Log.i("PicSync", "No permission to READ_EXTERNAL_STORAGE");
             PicSyncState = ePicSyncState.PIC_SYNC_STATE_NO_ACCESS;
             MyState="No access to external storage";
         }
     }
-    @Override
-    public IBinder onBind(Intent intent) {
-        // TODO: Return the communication channel to the service.
-        throw new UnsupportedOperationException("Not yet implemented");
-    }
 
-    private void PublishState(String State2Send) {
+	public int onStartCommand(Intent intent, int flags, int startId) {
+		super.onStartCommand(intent, flags, startId);
+		Log.i("PicSync", "onStartCommand");
+		myBinder = new LocalBinder();
+		return START_STICKY;
+	}
+
+	public class LocalBinder extends Binder {
+		PicSync getService() {
+			return PicSync.this;
+		}
+	}
+
+	@Override
+	public IBinder onBind(Intent intent) {
+		return myBinder;
+	}
+
+	private boolean isRealDirectory(String file) {
+		boolean returnvalue = true;
+		try {
+			if (!file.endsWith(File.separator))
+				file = file + File.separator;
+			new SmbFile(file, auth).list();
+		} catch (SmbException | MalformedURLException e) {
+			returnvalue = false;
+		}
+		return returnvalue;
+	}
+
+	SmbFileFilter browseCIFSFilter = new SmbFileFilter() {
+		@Override
+		public boolean accept(SmbFile file) {
+			int filetype = 0;
+			try {
+				filetype = file.getType();
+			} catch (SmbException e) {
+				e.printStackTrace();
+				return false;
+			}
+			String filepath = file.getPath();
+			String filename = file.getName();
+			if (filename.endsWith("/"))
+				filename = TextUtils.substring(filename, 0, TextUtils.lastIndexOf(filename, '/'));
+			int tmp = filetype & cifsAllowedBrowsables;
+			if ((filetype & cifsAllowedBrowsables) == 0)
+				return false;
+			if (filename.startsWith(".") || filename.contains("$"))
+				return false;
+			return true;
+		}
+	};
+
+	public void BrowseCIFS(String path) {
+		if (values == null)
+			values = new ArrayList();
+		else
+			values.clear();
+		if (!path.endsWith(File.separator))
+			path = path + File.separator;
+		SmbFile dir;
+		SmbFile[] list;
+		String servername = "";
+		String sharename = "";
+		int smbtype = 0;
+		boolean canReadDir = true;
+		try {
+			establishSMB();
+			//Check, whether it is not a smb://server/../ format
+			String pathToCheckWithoutDoubleDots = path.replaceAll("\\.\\.\\/$", "");
+			if (path.endsWith(".." + File.separator) && (new SmbFile(pathToCheckWithoutDoubleDots, auth).getType() & SmbFile.TYPE_SERVER) == SmbFile.TYPE_SERVER)
+				path = new SmbFile(pathToCheckWithoutDoubleDots, auth).getParent();
+			if (TextUtils.equals(path.toLowerCase(), "smb://../"))
+				path = "smb://";
+			path = new SmbFile(path).getCanonicalPath();
+			dir = new SmbFile(path, auth);
+/*
+			canReadDir = dir.canRead();
+			if (!canReadDir) {
+				return;
+			}
+*/
+			servername = dir.getServer();
+			sharename = dir.getShare();
+			list = dir.listFiles(browseCIFSFilter);
+			if (list != null) {
+				for (SmbFile file : list) {
+/*
+					SmbFile file2verify;
+					if (new SmbFile(path,auth).getType() == SmbFile.TYPE_WORKGROUP)
+						file2verify = new SmbFile("smb://"+file+File.separator, auth);
+					else
+						file2verify = new SmbFile(path + file+File.separator, auth);
+*/
+					smbtype = file.getType();
+/*
+					boolean isDirectory = file2verify.isDirectory();
+					boolean isHidden = file2verify.isHidden();
+					boolean isItRealDirectory = false;
+					if (isDirectory)
+						isItRealDirectory = isRealDirectory(file2verify.getCanonicalPath());
+*/
+/*
+					if ((!file.startsWith(".")) && (!file.startsWith("$")) && (!file.endsWith("$")) && ((smbtype == SmbFile.TYPE_WORKGROUP) || (smbtype == SmbFile.TYPE_SERVER) || (smbtype == SmbFile.TYPE_SHARE) || (smbtype == SmbFile.TYPE_FILESYSTEM)))
+*/
+					values.add(file.getName());
+				}
+				int tmp = smbtype & cifsAllowedBrowsablesForUp;
+				if ((smbtype & cifsAllowedBrowsablesForUp) != 0)
+					values.add("..");
+			}
+		} catch (MalformedURLException e) {
+			e.printStackTrace();
+		} catch (SmbException e) {
+			e.printStackTrace();
+		}
+
+		Collections.sort(values);
+		Intent returnCIFSListIntent = new Intent("CIFSList");
+		returnCIFSListIntent.putExtra("cifsList", (String[]) values.toArray(new String[values.size()]));
+		returnCIFSListIntent.putExtra("smbCanonicalPath", path);
+		returnCIFSListIntent.putExtra("smbType", smbtype);
+		returnCIFSListIntent.putExtra("servername", servername);
+		returnCIFSListIntent.putExtra("sharename", sharename);
+		LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnCIFSListIntent);
+	}
+
+	private void PublishState(String State2Send) {
         Intent intent = new Intent(NOTIFICATION);
         intent.putExtra(STATE, State2Send);
         sendBroadcast(intent);
@@ -111,10 +248,16 @@ public class PicSync extends IntentService {
 
     @Override
     protected void onHandleIntent(Intent intent) {
-        if (intent != null) {
-            final String action = intent.getAction();
+		if (intent != null) {
+			final String action = intent.getAction();
             Log.i("PicSync","onHandleIntent: "+action);
-            if (ACTION_GET_STATE.equals(action)) {
+
+			if (ACTION_BROWSE_CIFS.equals(action)) {
+				final String path = intent.getStringExtra("path");
+				BrowseCIFS(path);
+				return;
+			}
+			if (ACTION_GET_STATE.equals(action)) {
                 final String param1 = intent.getStringExtra(EXTRA_PARAM1);
                 final String param2 = intent.getStringExtra(EXTRA_PARAM2);
                 handleActionGetState(param1, param2);
@@ -138,10 +281,22 @@ public class PicSync extends IntentService {
                 handleActionStopSync(param1, param2);
                 return;
             }
-        }
+			if (ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS.equals(action)) {
+				addMediaFoldersToSettings();
+				return;
+			}
+		}
     }
-    private File[] listFiles(String path) {
-        return null;
+
+	private void addMediaFoldersToSettings() {
+		String[] MediaFolderList = getMediaPaths(getStoragePaths());
+		Intent returnMediaFoldersListIntent = new Intent("getMediaFoldersList");
+		returnMediaFoldersListIntent.putExtra("MediaFoldersList", MediaFolderList);
+		LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnMediaFoldersListIntent);
+	}
+
+	private File[] listFiles(String path) {
+		return null;
     }
 
     private String[] getStoragePaths(){
@@ -149,7 +304,8 @@ public class PicSync extends IntentService {
         /*
         First, gather all possible "external" storage locations
          */
-        final Set<String> storagePathsSet = new HashSet<String>();
+		/*final*/
+		SortedSet<String> storagePathsSet = new TreeSet<String>();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             File[] externalMediaDirs = this.getExternalMediaDirs();
             for (File externalMediaDir : externalMediaDirs){
@@ -182,10 +338,12 @@ public class PicSync extends IntentService {
             e.printStackTrace();
         }
 
-        final String envSecondaryStorages = System.getenv("SECONDARY_STORAGE");
-        if (!TextUtils.isEmpty(envSecondaryStorages)) {
+        /*final */
+		String envSecondaryStorages = System.getenv("SECONDARY_STORAGE");
+		if (!TextUtils.isEmpty(envSecondaryStorages)) {
             // All Secondary SD-CARDs splited into array
-            final String[] rawSecondaryStorages = envSecondaryStorages.split(File.pathSeparator);
+			/*final*/
+			String[] rawSecondaryStorages = envSecondaryStorages.split(File.pathSeparator);
             for (String rawSecondaryStorage : rawSecondaryStorages) {
                 if (!rawSecondaryStorage.toLowerCase().contains("usb"))
                     try {
@@ -343,8 +501,11 @@ public class PicSync extends IntentService {
         return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
     }
     private String[] getMediaPaths(String[] storagePaths){
-        Set<String> mediaPathsSet = new HashSet<String>();
-        for (String storagePath : storagePaths) {
+/*
+		Set<String> mediaPathsSet = new HashSet<String>();
+*/
+		SortedSet<String> mediaPathsSet = new TreeSet<String>();
+		for (String storagePath : storagePaths) {
             Collections.addAll(mediaPathsSet, getMediaPaths(storagePath));
         }
         return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
@@ -428,8 +589,10 @@ public class PicSync extends IntentService {
 
             // TODO Prerobit na novy thread?
             MyState = "PicSync running";
-            DoSync();
-            MyState = "PicSync has ran";
+/*
+			DoSync();
+*/
+			MyState = "PicSync has ran";
 
             Log.i("PicSync", "handleActionStartSync: " + MyState);
             PublishState(MyState);
@@ -466,8 +629,14 @@ public class PicSync extends IntentService {
         smbpasswd=settings.getString(MainScreen.prefsSMBPWD,"PASSWORD");
         smbshare=settings.getString(MainScreen.prefsSMBSHARE,smbuser);
 */
-        if (auth != null)
+
+		/* TODO
+		Tu treba skontrolovat, ci sa zmenila konfiguracia
+		 */
+		/*
+		if (auth != null)
             return;
+*/
 
         SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
         smbservername = settings.getString("prefsSMBSRV", "");
@@ -538,17 +707,9 @@ public class PicSync extends IntentService {
 
         try {
             in=new SmbFileInputStream(sfile);
-        }catch(MalformedURLException e) {
-            e.printStackTrace();
+		} catch (MalformedURLException | SmbException | UnknownHostException e) {
+			e.printStackTrace();
             Log.i("PicSync", "File NOT opened " + e.getMessage());
-            return;
-        }catch(SmbException e) {
-            e.printStackTrace();
-            Log.i("PicSync","File NOT opened " + e.getMessage());
-            return;
-        }catch(UnknownHostException e){
-            e.printStackTrace();
-            Log.i("PicSync","File NOT opened " + e.getMessage());
             return;
         }
         byte[] b = new byte[8192];

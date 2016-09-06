@@ -29,13 +29,22 @@
         android:title="CIFS server"/>
 
     <EditTextPreference
+        android:defaultValue="Picstures"
+        android:inputType="textNoSuggestions"
+        android:key="prefsSMBSHARE"
+        android:maxLines="1"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:title="Shared folder name"/>
+
+    <EditTextPreference
         android:defaultValue="/share/"
         android:inputType="textNoSuggestions"
         android:key="prefsTGTURI"
         android:maxLines="1"
         android:selectAllOnFocus="true"
         android:singleLine="true"
-        android:title="Target folder"/>
+        android:title="CIFS complete path"/>
 
     <Preference
         android:defaultValue="smb://server/share"

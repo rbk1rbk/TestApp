@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory android:title="Local Media Folders"/>
+    <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+                      android:title="Local media folders to sync">
+        <Preference android:title="Find media folders">
+            <intent
+                android:action="android.intent.action.VIEW"
+                android:targetClass="com.rbk.testapp.SyncedFoldersList"
+                android:targetPackage="com.rbk.testapp">
+                <extra
+                    android:name="action"
+                    android:value="com.rbk.testapp.PicSync.action.addMediaFolders"/>
+            </intent>
+        </Preference>
+        <Preference android:title="Edit media folders list">
+            <intent
+                android:action="android.intent.action.VIEW"
+                android:targetClass="com.rbk.testapp.SyncedFoldersList"
+                android:targetPackage="com.rbk.testapp"/>
+        </Preference>
+    </PreferenceScreen>
+    <PreferenceCategory
+        android:title="Picture Upload">
+        <EditTextPreference
+            android:title="Per album folder?"/>
+        <EditTextPreference
+            android:title="Target subfolder name format"/>
+        <EditTextPreference
+            android:title="Conflicting names resolution"/>
+        <EditTextPreference
+            android:title="Conflicting names resolution"/>
+    </PreferenceCategory>
+    <PreferenceCategory
+        android:title="Source retention">
+        <EditTextPreference
+            android:title="Delete local pictures after XX days"/>
+        <EditTextPreference
+            android:title="Shrink local pictures after XX days"/>
+        <EditTextPreference
+            android:title="Delete local pictures if less than XX% free"/>
+    </PreferenceCategory>
+</PreferenceScreen>

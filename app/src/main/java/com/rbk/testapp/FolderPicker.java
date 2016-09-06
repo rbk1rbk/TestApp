@@ -1,8 +1,10 @@
 package com.rbk.testapp;
 
 import android.app.ListActivity;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.support.design.widget.FloatingActionButton;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -30,6 +32,7 @@ public class FolderPicker extends AppCompatActivity {
 public class FolderPicker extends ListActivity {
 
     private String path;
+    private final Context MyContext = this;
 
     private void dirListToFOLDERListView() {
         List values = new ArrayList();
@@ -77,6 +80,19 @@ public class FolderPicker extends ListActivity {
         }
         setTitle(path);
 
+        FloatingActionButton fabAddNewFolder = (FloatingActionButton) findViewById(R.id.fabAddNewFolder);
+        if (fabAddNewFolder != null) {
+            fabAddNewFolder.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    Intent returnIntent = new Intent();
+                    returnIntent.putExtra("path", path);
+                    setResult(0, returnIntent);
+                    finish();
+                }
+            });
+        }
+
         dirListToFOLDERListView();
     }
 
@@ -99,12 +115,5 @@ public class FolderPicker extends ListActivity {
         } else {
             Toast.makeText(this, filename + " is not a directory", Toast.LENGTH_LONG).show();
         }
-    }
-
-    public void onBtnSelectClick(View v) {
-        Intent returnIntent = new Intent();
-        returnIntent.putExtra("path", path);
-        setResult(0, returnIntent);
-        finish();
     }
 }

@@ -44,7 +44,7 @@ public class MainScreen extends AppCompatActivity {
             if (bundle != null) {
                 String string = bundle.getString(PicSync.STATE);
                     Log.i("MainScreen","onReceive got string "+string);
-                    MainScreen.twPicSyncState.setText(string);
+//                    MainScreen.twPicSyncState.setText(string);
 //                    Toast.makeText(MainScreen.this, "PicSync says: "+ string, Toast.LENGTH_SHORT).show();
             }
         }
@@ -127,16 +127,18 @@ public class MainScreen extends AppCompatActivity {
 
         alreadyRunning = true;
         Intent intent = new Intent(this, WifiWatchdogService.class);
-        this.startService(intent);
+        startService(intent);
+
+        DrawMainScreen();
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
         } else {
             Intent PicSyncIntent = new Intent(this, PicSync.class);
             PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
-            this.startService(PicSyncIntent);
+            startService(PicSyncIntent);
         }
-        DrawMainScreen();
+
 
         Log.i("MainScreen", "onCreate finished");
     }
@@ -144,12 +146,12 @@ public class MainScreen extends AppCompatActivity {
     protected void onResume() {
         Log.i("MainScreen","onResume called");
         super.onResume();
+        DrawMainScreen();
         registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
         Intent PicSyncIntent = new Intent(this,PicSync.class);
         PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
         this.startService(PicSyncIntent);
-        DrawMainScreen();
-        this.startService(PicSyncIntent);
+        Log.i("MainScreen", "onResume finished");
     }
 
     @Override

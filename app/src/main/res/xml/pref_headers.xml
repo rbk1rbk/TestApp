@@ -11,6 +11,9 @@
     <header
         android:fragment="com.rbk.testapp.SettingsActivity$PreferenceFragmentNotification"
         android:title="Notifications"/>
+    <header
+        android:fragment="com.rbk.testapp.SettingsActivity$PreferenceFragmentUpload"
+        android:title="Picture upload options"/>
     <!--
             android:icon="@drawable/ic_info_black_24dp"
             android:icon="@drawable/ic_sync_black_24dp"

@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
     <!-- TODO: autostart -->
     <application
@@ -35,7 +37,8 @@
 
         <service
             android:name=".PicSync"
-            android:exported="false"/>
+            android:exported="false">
+        </service>
         <!--
                         android:label="PicSync"
                     android:process=":PicSync"
@@ -61,6 +64,15 @@
         <activity android:name=".FolderPicker">
         </activity>
         <activity android:name=".WiFiPicker">
+        </activity>
+        <activity
+            android:name=".SyncedFoldersList"
+            android:label="@string/title_activity_synced_folders_list"
+            android:parentActivityName=".SettingsActivity"
+            android:theme="@style/AppTheme.NoActionBar.NoActionBar">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value="com.rbk.testapp.SettingsActivity"/>
         </activity>
     </application>
 

@@ -4,6 +4,8 @@
         android:defaultValue="true"
         android:key="pref_switch_enabled"
         android:summary="Enable or disable synchronization"
+        android:switchTextOn="1"
+        android:switchTextOff="0"
         android:title="Enable / disable sync"/>
 
     <Preference
@@ -25,14 +27,21 @@
         android:positiveButtonText="@null"
         android:title="When to sync"/>
 
-    <PreferenceScreen android:key="pref_local_dirs_screen" android:title="Synced directories">
-        <CheckBoxPreference
-            android:key="pref_directory_1"
-            android:defaultValue="/mnt/dir1"
-            android:title="dir1"/>
-        <CheckBoxPreference
-            android:key="pref_directory_2"
-            android:defaultValue="/mnt/dir2"
-            />
-    </PreferenceScreen>
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="pref_switch_WOL"
+        android:summary="Wake remote computer"
+        android:switchTextOn="1"
+        android:switchTextOff="0"
+        android:title="Wake On LAN"/>
+
+    <EditTextPreference
+        android:defaultValue="00:11:22:33:44:55"
+        android:inputType="text"
+        android:key="prefsMAC"
+        android:maxLines="2"
+        android:selectAllOnFocus="true"
+        android:singleLine="true"
+        android:dependency="pref_switch_WOL"
+        android:title="Remote server MAC address"/>
 </PreferenceScreen>

@@ -11,8 +11,11 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class WiFiPicker extends ListActivity {
-	WifiWatchdogService wifiWatchdogServiceService;
+	WifiWatchdogService wifiWatchdogServiceGW;
 	boolean WifiWatchdogServiceBound = false;
 
 	private ServiceConnection wifiWatchdogServiceConnection = new ServiceConnection() {
@@ -21,16 +24,24 @@ public class WiFiPicker extends ListActivity {
 		public void onServiceConnected(ComponentName className, IBinder service) {
 			// We've bound to LocalService, cast the IBinder and get LocalService instance
 			WifiWatchdogService.LocalBinder binder = (WifiWatchdogService.LocalBinder) service;
-			wifiWatchdogServiceService = binder.getService();
+			wifiWatchdogServiceGW = binder.getService();
 			WifiWatchdogServiceBound = true;
 			String[] wifiList;
-			if (wifiWatchdogServiceService!=null && WifiWatchdogServiceBound) {
-				wifiList = wifiWatchdogServiceService.getWifiList();
+			Set<String> wifiSet = new HashSet<String>();
+			if (wifiWatchdogServiceGW != null && WifiWatchdogServiceBound) {
+/*
+				wifiWatchdogServiceGW.startScan();
+*/
+				wifiList = wifiWatchdogServiceGW.getWifiList();
+				wifiSet.add(wifiWatchdogServiceGW.getCurrentSsid());
+				for (String wifiName : wifiList) {
+					wifiSet.add(wifiName);
+				}
 /*
 		List values = new ArrayList();
 		Collections.addAll(values, wifiList);
 */
-				ArrayAdapter adapter = new ArrayAdapter(WiFiPicker.this, android.R.layout.simple_list_item_1, android.R.id.text1, wifiList);
+				ArrayAdapter adapter = new ArrayAdapter(WiFiPicker.this, android.R.layout.simple_list_item_1, android.R.id.text1, wifiSet.toArray(new String[wifiSet.size()]));
 				setListAdapter(adapter);
 			}
 		}
@@ -61,5 +72,11 @@ public class WiFiPicker extends ListActivity {
 		returnIntent.putExtra("wifiName",(String)getListAdapter().getItem(position));
 		setResult(0, returnIntent);
 		finish();
+	}
+
+	@Override
+	protected void onDestroy() {
+		super.onDestroy();
+		unbindService(wifiWatchdogServiceConnection);
 	}
 }
