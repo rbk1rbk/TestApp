@@ -1,8 +1,10 @@
 package com.rbk.testapp;
 
+import android.app.AlertDialog;
 import android.app.ListActivity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -11,7 +13,9 @@ import android.preference.PreferenceManager;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.content.LocalBroadcastManager;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.ListView;
 import android.widget.ProgressBar;
 
 import java.util.ArrayList;
@@ -26,6 +30,7 @@ public class SyncedFoldersList extends ListActivity {
 	private static SharedPreferences prefs;
 	private static SharedPreferences.Editor editor;
 	private List folderList;
+	private static ListView mediaFolderListView;
 	private static Set<String> prefFolderList;
 	private static ProgressBar progressBar;
 	private static boolean mMessageReceiverRegistered = false;
@@ -35,12 +40,17 @@ public class SyncedFoldersList extends ListActivity {
 		public void onReceive(Context context, Intent intent) {
 			Bundle bundle = intent.getExtras();
 			if (bundle != null) {
+
+				prefFolderList = prefs.getStringSet("prefFolderList", null);
+/*
 				if (prefFolderList == null)
 					prefFolderList = new HashSet<String>();
 				else
 					prefFolderList.clear();
-				prefFolderList = prefs.getStringSet("prefFolderList", null);
-				Collections.addAll(prefFolderList, bundle.getStringArray("MediaFoldersList"));
+*/
+				String [] mediaFolderList = bundle.getStringArray("MediaFoldersList");
+				if ((mediaFolderList != null) && (prefFolderList != null))
+					Collections.addAll(prefFolderList, mediaFolderList);
 				if (editor == null)
 					editor = prefs.edit();
 				editor.putStringSet("prefFolderList", prefFolderList);
@@ -131,10 +141,39 @@ public class SyncedFoldersList extends ListActivity {
 			@Override
 			public void run() {*/
 		progressBar.setVisibility(ProgressBar.INVISIBLE);
-		List folderList = new ArrayList();
-		folderList.addAll(prefs.getStringSet("prefFolderList", null));
-		ArrayAdapter adapter = new ArrayAdapter(MyContext, android.R.layout.simple_list_item_1, android.R.id.text1, folderList);
+		Set<String> folderListArray = prefs.getStringSet("prefFolderList",null);
+		final List folderList = new ArrayList();
+		folderList.addAll(folderListArray);
+		Collections.sort(folderList);
+		final ArrayAdapter adapter = new ArrayAdapter(MyContext, android.R.layout.simple_list_item_1, android.R.id.text1, folderList);
 		setListAdapter(adapter);
+		mediaFolderListView = getListView();
+		mediaFolderListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+			@Override
+			public boolean onItemLongClick(AdapterView<?> parent, View view, final int position, long id) {
+				final String selectedValue = (String) mediaFolderListView.getItemAtPosition(position);
+				AlertDialog.Builder confirmDeletionDialog = new AlertDialog.Builder(MyContext);
+				confirmDeletionDialog.setTitle("Delete?");
+				confirmDeletionDialog.setMessage(selectedValue);
+				confirmDeletionDialog.setNegativeButton("Delete", new DialogInterface.OnClickListener() {
+					public void onClick(DialogInterface dialog, int whichButton) {
+						folderList.remove(position);
+						adapter.notifyDataSetChanged();
+						adapter.notifyDataSetInvalidated();
+						SharedPreferences.Editor editor = prefs.edit();
+						editor.putStringSet("prefFolderList",new HashSet<String>(folderList));
+						editor.commit();
+					}
+				});
+				confirmDeletionDialog.setPositiveButton("Keep",new DialogInterface.OnClickListener() {
+					public void onClick(DialogInterface dialog, int whichButton) {
+
+					}
+				});
+				confirmDeletionDialog.show();
+				return false;
+			}
+		});
 /*
 			}
 		});
