@@ -1,10 +1,13 @@
 package com.rbk.testapp;
 
 import android.app.ListActivity;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
+import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -33,12 +36,50 @@ public class FolderPicker extends ListActivity {
 
     private String path;
     private final Context MyContext = this;
+	private static boolean mMessageReceiverRegistered = false;
 
-    private void dirListToFOLDERListView() {
-        List values = new ArrayList();
-        File dir = new File(path);
-        if (!dir.canRead()) {
-            setTitle(getTitle() + " (inaccessible)");
+	private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			Bundle bundle = intent.getExtras();
+			List values = new ArrayList();
+			if (bundle != null) {
+				Collections.addAll(values, bundle.getStringArray("storagePaths"));
+				Collections.sort(values);
+				final ArrayAdapter adapter = new ArrayAdapter(MyContext, android.R.layout.simple_list_item_1, android.R.id.text1, values);
+				runOnUiThread(new Runnable() {
+					@Override
+					public void run() {
+						setListAdapter(adapter);
+					}
+				});
+			}
+		}
+
+	};
+
+	private void dirListToFOLDERListView() {
+		List values = new ArrayList();
+		File dir = null;
+		String pathCanonical;
+		if (TextUtils.equals(path, "getStoragePaths")) {
+			path = "";
+			Intent intentPicSync = new Intent(this, PicSync.class);
+			intentPicSync.setAction(PicSync.ACTION_GET_STORAGE_PATHS);
+			startService(intentPicSync);
+		}
+		try {
+			pathCanonical = new File(path).getCanonicalPath();
+		} catch (IOException e) {
+			e.printStackTrace();
+			values.add("../");
+			return;
+		}
+		if (!pathCanonical.endsWith(File.separator))
+			pathCanonical += File.separator;
+		dir = new File(pathCanonical);
+		if (!dir.canRead()) {
+			setTitle(getTitle() + " (inaccessible)");
         }
         String[] list = dir.list();
         if (list != null) {
@@ -54,9 +95,9 @@ public class FolderPicker extends ListActivity {
         }
 
         try {
-            if (!TextUtils.equals(new File(path).getCanonicalPath(), new File(path + "/..").getCanonicalPath()))
-                values.add("..");
-        } catch (IOException e) {
+			if (!TextUtils.equals(new File(path).getCanonicalPath(), new File(path + "/../").getCanonicalPath()))
+				values.add("../");
+		} catch (IOException e) {
             e.printStackTrace();
         }
         Collections.sort(values);
@@ -70,15 +111,25 @@ public class FolderPicker extends ListActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+/*
+		// Funguje, ale chce to tuning layoutu a namiesto FAB pouzit OK a CANCEL
+		// Podobne, ako v SyncedFolderList populateList()
+        setTheme(android.R.style.Theme_Dialog);
+*/
+		super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_folder_picker);
 
         // Use the current directory as title
-        path = "/";
-        if (getIntent().hasExtra("path")) {
+		//Todo: implementovat korenovy zoznam adresarov z PicSync.getStoragePaths()
+		path = "getStoragePaths";
+		if (getIntent().hasExtra("path")) {
             path = getIntent().getStringExtra("path");
         }
         setTitle(path);
+
+		LocalBroadcastManager.getInstance(getBaseContext()).registerReceiver(
+				mMessageReceiver, new IntentFilter("storagePaths"));
+		mMessageReceiverRegistered = true;
 
         FloatingActionButton fabAddNewFolder = (FloatingActionButton) findViewById(R.id.fabAddNewFolder);
         if (fabAddNewFolder != null) {
@@ -116,4 +167,12 @@ public class FolderPicker extends ListActivity {
             Toast.makeText(this, filename + " is not a directory", Toast.LENGTH_LONG).show();
         }
     }
+
+	@Override
+	protected void onDestroy() {
+		super.onDestroy();
+		if (mMessageReceiverRegistered)
+			LocalBroadcastManager.getInstance(getBaseContext()).unregisterReceiver(mMessageReceiver);
+		mMessageReceiverRegistered = false;
+	}
 }

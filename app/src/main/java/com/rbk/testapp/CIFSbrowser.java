@@ -62,8 +62,7 @@ public class CIFSbrowser extends ListActivity {
 		runOnUiThread(new Runnable() {
 			@Override
 			public void run() {
-				ArrayAdapter adapter = new ArrayAdapter(contextCIFS,
-															   android.R.layout.simple_list_item_1, android.R.id.text1, currDirContent);
+				ArrayAdapter adapter = new ArrayAdapter(contextCIFS, android.R.layout.simple_list_item_1, android.R.id.text1, currDirContent);
 				setListAdapter(adapter);
 				mActionBarToolbar.setTitle(currDir);
 				mActionBarToolbar.setSubtitle(currDir);

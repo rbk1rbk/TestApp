@@ -10,7 +10,6 @@
     tools:showIn="@layout/activity_folder_picker">
 
     <ListView
-        android:layout_span="3"
         android:id="@android:id/list"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -20,6 +19,5 @@
         android:smoothScrollbar="true"
         android:theme="@style/AppTheme"
         android:stackFromBottom="false"
-        android:layout_rowWeight="0"
         />
 </LinearLayout>

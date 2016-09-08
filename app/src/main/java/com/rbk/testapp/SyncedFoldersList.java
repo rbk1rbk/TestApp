@@ -73,7 +73,6 @@ public class SyncedFoldersList extends ListActivity {
 		progressBar = (ProgressBar) findViewById(R.id.progressBar);
 
 		prefs = PreferenceManager.getDefaultSharedPreferences(this);
-		prefFolderList = new HashSet<String>();
 		Intent myIntent = getIntent();
 		if (myIntent.hasExtra("action")) {
 			if (myIntent.getStringExtra("action").equals(PicSync.ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS)) {
@@ -107,6 +106,16 @@ public class SyncedFoldersList extends ListActivity {
 /*
 		getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 */
+
+		FloatingActionButton fabDetectFolders = (FloatingActionButton) findViewById(R.id.fabDetectFolders);
+		if (fabDetectFolders != null) {
+			fabDetectFolders.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					callForAddMediaFoldersToSettings();
+				}
+			});
+		}
 	}
 
 	private void callForAddMediaFoldersToSettings() {
@@ -124,10 +133,10 @@ public class SyncedFoldersList extends ListActivity {
 	@Override
 	protected void onActivityResult(int reqCode, int resCode, Intent data) {
 		if ((reqCode == 2000) & (resCode == 0) & (data != null)) {
-			prefFolderList.clear();
 			prefFolderList = prefs.getStringSet("prefFolderList", null);
+			if (prefFolderList == null)
+				prefFolderList = new HashSet<String>();
 			prefFolderList.add(data.getStringExtra("path"));
-
 			SharedPreferences.Editor editor = prefs.edit();
 			editor.putStringSet("prefFolderList", prefFolderList);
 			editor.commit();
@@ -143,8 +152,10 @@ public class SyncedFoldersList extends ListActivity {
 		progressBar.setVisibility(ProgressBar.INVISIBLE);
 		Set<String> folderListArray = prefs.getStringSet("prefFolderList",null);
 		final List folderList = new ArrayList();
-		folderList.addAll(folderListArray);
-		Collections.sort(folderList);
+		if (folderListArray != null) {
+			folderList.addAll(folderListArray);
+			Collections.sort(folderList);
+		}
 		final ArrayAdapter adapter = new ArrayAdapter(MyContext, android.R.layout.simple_list_item_1, android.R.id.text1, folderList);
 		setListAdapter(adapter);
 		mediaFolderListView = getListView();

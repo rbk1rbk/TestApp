@@ -63,6 +63,7 @@ public class PicSync extends IntentService {
     static final String ACTION_START_SYNC_RESTART = "com.rbk.testapp.PicSync.action.Resync";
 	static final String ACTION_BROWSE_CIFS = "com.rbk.testapp.PicSync.action.BrowseCIFS";
 	static final String ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS = "com.rbk.testapp.PicSync.action.addMediaFolders";
+	static final String ACTION_GET_STORAGE_PATHS = "com.rbk.testapp.PicSync.action.getStoragePaths";
 
     static String smblocalhostname = "testovacimobil";
     static String picSyncLogFile = "testapp."+smblocalhostname+".log";
@@ -283,6 +284,13 @@ public class PicSync extends IntentService {
             }
 			if (ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS.equals(action)) {
 				addMediaFoldersToSettings();
+				return;
+			}
+			if (ACTION_GET_STORAGE_PATHS.equals(action)) {
+				String[] storagePaths = getStoragePaths();
+				Intent returnstoragePathsIntent = new Intent("storagePaths");
+				returnstoragePathsIntent.putExtra("storagePaths", storagePaths);
+				LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnstoragePathsIntent);
 				return;
 			}
 		}
