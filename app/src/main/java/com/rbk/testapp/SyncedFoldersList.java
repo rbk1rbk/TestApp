@@ -42,9 +42,9 @@ public class SyncedFoldersList extends ListActivity {
 			if (bundle != null) {
 
 				prefFolderList = prefs.getStringSet("prefFolderList", null);
-/*
 				if (prefFolderList == null)
 					prefFolderList = new HashSet<String>();
+/*
 				else
 					prefFolderList.clear();
 */

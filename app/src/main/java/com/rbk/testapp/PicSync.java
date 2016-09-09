@@ -514,7 +514,9 @@ public class PicSync extends IntentService {
 */
 		SortedSet<String> mediaPathsSet = new TreeSet<String>();
 		for (String storagePath : storagePaths) {
-            Collections.addAll(mediaPathsSet, getMediaPaths(storagePath));
+			String [] mediaPath=getMediaPaths(storagePath);
+			if (mediaPath!=null)
+				Collections.addAll(mediaPathsSet, mediaPath);
         }
         return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
     }

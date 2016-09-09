@@ -17,7 +17,6 @@ import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
-import android.preference.PreferenceScreen;
 import android.preference.RingtonePreference;
 import android.support.v4.app.NavUtils;
 import android.support.v7.app.ActionBar;
@@ -230,8 +229,11 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
 /*
             checkBoxPreference.setChecked(false);
 */
+/*
             PreferenceScreen targetScreen = (PreferenceScreen) findPreference("pref_local_dirs_screen");
-            targetScreen.addPreference(checkBoxPreference);
+            if (targetScreen != null)
+                targetScreen.addPreference(checkBoxPreference);
+*/
 /*
             bindPreferenceSummaryToValue(findPreference("pref_directory_1"));
             bindPreferenceSummaryToValue(findPreference("pref_directory_2"));
