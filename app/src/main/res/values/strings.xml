@@ -60,4 +60,9 @@
 
     <string name="pref_title_vibrate">Vibrate</string>
     <string name="title_activity_synced_folders_list">SyncedFoldersList</string>
+    <string name="pref_cifs_server">prefsSMBSRV</string>
+    <string name="pref_cifs_user">prefsSMBUSER</string>
+    <string name="pref_cifs_password">prefsSMBPWD</string>
+    <string name="pref_cifs_share">prefsSMBSHARE</string>
+    <string name="pref_cifs_url">prefsTGTURI</string>
 </resources>

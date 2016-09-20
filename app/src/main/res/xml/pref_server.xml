@@ -4,7 +4,7 @@
     <EditTextPreference
         android:defaultValue="guest"
         android:inputType="textNoSuggestions"
-        android:key="prefsSMBUSER"
+        android:key="@string/pref_cifs_user"
         android:maxLines="1"
         android:selectAllOnFocus="true"
         android:singleLine="true"
@@ -13,23 +13,23 @@
     <EditTextPreference
         android:defaultValue=""
         android:inputType="textPassword"
-        android:key="prefsSMBPWD"
+        android:key="@string/pref_cifs_password"
         android:maxLines="1"
         android:selectAllOnFocus="true"
         android:singleLine="true"
         android:title="CIFS password"/>
 
     <EditTextPreference
-        android:defaultValue="192.168.0.1"
+        android:defaultValue=""
         android:inputType="textNoSuggestions"
-        android:key="prefsSMBSRV"
+        android:key="@string/pref_cifs_server"
         android:maxLines="1"
         android:selectAllOnFocus="true"
         android:singleLine="true"
         android:title="CIFS server"/>
 
     <EditTextPreference
-        android:defaultValue="Picstures"
+        android:defaultValue=""
         android:inputType="textNoSuggestions"
         android:key="prefsSMBSHARE"
         android:maxLines="1"
@@ -38,7 +38,7 @@
         android:title="Shared folder name"/>
 
     <EditTextPreference
-        android:defaultValue="/share/"
+        android:defaultValue=""
         android:inputType="textNoSuggestions"
         android:key="prefsTGTURI"
         android:maxLines="1"

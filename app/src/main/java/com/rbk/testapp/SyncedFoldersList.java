@@ -44,10 +44,6 @@ public class SyncedFoldersList extends ListActivity {
 				prefFolderList = prefs.getStringSet("prefFolderList", null);
 				if (prefFolderList == null)
 					prefFolderList = new HashSet<String>();
-/*
-				else
-					prefFolderList.clear();
-*/
 				String [] mediaFolderList = bundle.getStringArray("MediaFoldersList");
 				if ((mediaFolderList != null) && (prefFolderList != null))
 					Collections.addAll(prefFolderList, mediaFolderList);

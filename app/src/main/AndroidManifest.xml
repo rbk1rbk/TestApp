@@ -74,6 +74,12 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.rbk.testapp.SettingsActivity"/>
         </activity>
+
+        <service
+            android:name=".PicSyncScheduler"
+            android:enabled="true"
+            android:exported="false">
+        </service>
     </application>
 
 </manifest>

@@ -29,7 +29,6 @@ public class CIFSbrowser extends ListActivity {
 	private int currSmbLevel;
 	private String currDir;
 	private List currDirContent;
-	private String smbuser, smbpasswd, smbservername, smbshare;
 	private static NtlmPasswordAuthentication auth = null;
 	private static boolean PicSyncBound = false;
 	private final Context contextCIFS = this;
@@ -88,12 +87,11 @@ public class CIFSbrowser extends ListActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_cifsbrowser);
 		mActionBarToolbar = (Toolbar) findViewById(R.id.toolbar);
+		String smbservername, smbshare;
 
 		currSmbLevel = 0;
 		currDir = "smb://";
 		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
-		smbuser = settings.getString("prefsSMBUSER", "");
-		smbpasswd = settings.getString("prefsSMBPWD", "");
 		smbservername = settings.getString("prefsSMBSRV", "");
 		smbshare = settings.getString("prefsTGTURI", "");
 		if (smbshare.startsWith("smb://"))

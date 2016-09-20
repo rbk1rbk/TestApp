@@ -86,6 +86,8 @@ public class PicSync extends IntentService {
     private static Handler h;
     private static String fileurl;
     static int READ_EXTERNAL_STORAGE_PERMISSION_CODE=1;
+	private static SharedPreferences settings;
+	private static boolean SharedPreferencesChanged=true;
 
 
     private enum ePicSyncState {PIC_SYNC_STATE_STOPPED, PIC_SYNC_STATE_RUNNING, PIC_SYNC_STATE_NO_ACCESS };
@@ -95,6 +97,14 @@ public class PicSync extends IntentService {
         super("PicSync");
     }
 
+	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
+			new SharedPreferences.OnSharedPreferenceChangeListener() {
+				public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
+					if (key.contains("smb")) {
+						SharedPreferencesChanged=true;
+					}
+				}
+			};
     @Override
     public void onCreate(){
         super.onCreate();
@@ -104,7 +114,11 @@ public class PicSync extends IntentService {
             PicSyncState = ePicSyncState.PIC_SYNC_STATE_NO_ACCESS;
             MyState="No access to external storage";
         }
-    }
+		settings = PreferenceManager.getDefaultSharedPreferences(this);
+		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
+		Intent intent = new Intent(this, PicSyncScheduler.class);
+		startService(intent);
+	}
 
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		super.onStartCommand(intent, flags, startId);
@@ -509,14 +523,14 @@ public class PicSync extends IntentService {
         return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
     }
     private String[] getMediaPaths(String[] storagePaths){
-/*
 		Set<String> mediaPathsSet = new HashSet<String>();
-*/
+/*
 		SortedSet<String> mediaPathsSet = new TreeSet<String>();
+*/
 		for (String storagePath : storagePaths) {
-			String [] mediaPath=getMediaPaths(storagePath);
-			if (mediaPath!=null)
-				Collections.addAll(mediaPathsSet, mediaPath);
+			String[] mediaPaths=getMediaPaths(storagePath);
+			if (mediaPaths!=null)
+            	Collections.addAll(mediaPathsSet, mediaPaths);
         }
         return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
     }
@@ -640,31 +654,33 @@ public class PicSync extends IntentService {
         smbshare=settings.getString(MainScreen.prefsSMBSHARE,smbuser);
 */
 
-		/* TODO
-		Tu treba skontrolovat, ci sa zmenila konfiguracia
-		 */
-		/*
-		if (auth != null)
+		if ((auth != null) && (!SharedPreferencesChanged))
             return;
-*/
 
         SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
-        smbservername = settings.getString("prefsSMBSRV", "");
+        smbservername = settings.getString(getString(R.string.pref_cifs_server), "");
+		smbuser = settings.getString(getString(R.string.pref_cifs_user), "");
+		smbpasswd = settings.getString(getString(R.string.pref_cifs_password), "");
+		smbshare = settings.getString(getString(R.string.pref_cifs_share), "");
+
+/*
         smbuser=settings.getString("prefsSMBUSER","");
         smbpasswd=settings.getString("prefsSMBPWD","PASSWORD");
         smbshare=settings.getString("prefsSMBSHARE",smbuser);
-/*
-        smbshareurl="smb://"+smbservername+"/"+smbshare+"/";
 */
+        smbshareurl="smb://"+smbservername+"/"+smbshare+"/";
+/*
         smbshareurl = settings.getString("prefsTGTURI", "");
+*/
 
         jcifs.Config.setProperty("jcifs.netbios.hostname", smblocalhostname);
         jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
-        if (auth==null)
+        if (((auth==null) || SharedPreferencesChanged) && (!smbuser.isEmpty()))
             auth = new NtlmPasswordAuthentication(null,smbuser, smbpasswd);
+		SharedPreferencesChanged =false;
         SmbFile[] domains = null;
         try {
-            domains = (new SmbFile(smbshareurl,auth)).listFiles();
+            domains = (new SmbFile("smb:///",auth)).listFiles();
         } catch (SmbException|MalformedURLException e) {
             e.printStackTrace();
             makeToast("PicSync: connectivity issue: " + e.getMessage());
