@@ -52,6 +52,9 @@ public class PicSyncScheduler extends Service {
 					if (TextUtils.equals(key,"pref_homewifissid")) {
 						wifiChangeReceiver.onReceive(myContext,new Intent("android.net.conn.CONNECTIVITY_CHANGE"));
 					}
+					if (TextUtils.equals(key,"pref_when2sync")) {
+						handleSyncCondititions();
+					}
 				}
 			};
 
@@ -143,17 +146,22 @@ public class PicSyncScheduler extends Service {
 		throw new UnsupportedOperationException("Not supported");
 	}
 
+	private void handleSyncCondititions() {
+		if (!TextUtils.equals(settings.getString("pref_when2sync", ""), "Manual only")) {
+			if (!wifiChangeReceiverRegistered) {
+				registerReceiver(wifiChangeReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
+				wifiChangeReceiverRegistered = true;
+				Log.d("PicSyncScheduler", "wifiChangeReceiver registered");
+			}
+			handleChargingConditions();
+		}
+	}
 	@Override
 	public void onCreate() {
 		super.onCreate();
 		settings = PreferenceManager.getDefaultSharedPreferences(this);
 		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
-		if (!wifiChangeReceiverRegistered){
-			registerReceiver(wifiChangeReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
-			wifiChangeReceiverRegistered=true;
-			Log.d("PicSyncScheduler","wifiChangeReceiver registered");
-		}
-		handleChargingConditions();
+		handleSyncCondititions();
 	}
 
 	private boolean isChargingConditionRequired() {

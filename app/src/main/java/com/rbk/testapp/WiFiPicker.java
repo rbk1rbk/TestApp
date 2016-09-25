@@ -33,7 +33,9 @@ public class WiFiPicker extends ListActivity {
 				wifiWatchdogServiceGW.startScan();
 */
 				wifiList = wifiWatchdogServiceGW.getWifiList();
-				wifiSet.add(wifiWatchdogServiceGW.getCurrentSsid());
+				String currentSSID=wifiWatchdogServiceGW.getCurrentSsid();
+				if (currentSSID != null)
+					wifiSet.add(wifiWatchdogServiceGW.getCurrentSsid());
 				for (String wifiName : wifiList) {
 					wifiSet.add(wifiName);
 				}

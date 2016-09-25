@@ -17,7 +17,6 @@ import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
-import android.preference.PreferenceScreen;
 import android.preference.RingtonePreference;
 import android.support.v4.app.NavUtils;
 import android.support.v7.app.ActionBar;
@@ -46,7 +45,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
         if ((reqCode == 1000) & (resCode == 0) & (data != null)) {
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
             SharedPreferences.Editor editor = prefs.edit();
-            editor.putString("prefsTGTURI", data.getStringExtra("path"));
+            editor.putString("prefsSMBURI", data.getStringExtra("path"));
             editor.putString("prefsSMBSRV", data.getStringExtra("servername"));
             editor.putString("prefsSMBSHARE", data.getStringExtra("sharename"));
             editor.commit();
@@ -262,7 +261,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             bindPreferenceSummaryToValue(findPreference("prefsSMBPWD"));
             bindPreferenceSummaryToValue(findPreference("prefsSMBSRV"));
             bindPreferenceSummaryToValue(findPreference("prefsSMBSHARE"));
-            bindPreferenceSummaryToValue(findPreference("prefsTGTURI"));
+            bindPreferenceSummaryToValue(findPreference("prefsSMBURI"));
         }
         @Override
         public boolean onOptionsItemSelected(MenuItem item) {

@@ -149,12 +149,14 @@ public class WifiWatchdogService extends Service {
 		}
 */
 		List<WifiConfiguration> wifiList = wifiManager.getConfiguredNetworks();
-		wifiSSIDList.clear();
-		for (WifiConfiguration wifiItem : wifiList) {
-			wifiSSIDList.add(wifiItem.SSID.replaceAll("^\"|\"$", ""));
+		if (wifiList != null) {
+			wifiSSIDList.clear();
+			for (WifiConfiguration wifiItem : wifiList) {
+				wifiSSIDList.add(wifiItem.SSID.replaceAll("^\"|\"$", ""));
+			}
 		}
 		if (wifiSSIDList.size() == 0) {
-			wifiSSIDList.add("No network in range");
+			wifiSSIDList.add("No network in range. Is Wifi on?");
 		}
 		return wifiSSIDList.toArray(new String[wifiSSIDList.size()]);
 	}

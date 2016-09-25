@@ -100,7 +100,7 @@ public class PicSync extends IntentService {
 	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
 			new SharedPreferences.OnSharedPreferenceChangeListener() {
 				public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-					if (key.contains("smb")) {
+					if (key.contains("smb") || key.contains("SMB")) {
 						SharedPreferencesChanged=true;
 					}
 				}

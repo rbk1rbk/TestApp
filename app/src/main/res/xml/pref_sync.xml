@@ -1,20 +1,23 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
 
+<!--
     <SwitchPreference
         android:defaultValue="true"
-        android:key="pref_switch_enabled"
+        android:key="pref_sync_enabled"
         android:summary="Enable or disable automatic synchronization"
         android:switchTextOn="1"
         android:switchTextOff="0"
         android:title="Enable / disable sync"/>
+-->
+    <ListPreference
+        android:defaultValue="-1"
+        android:entries="@array/pref_when2sync_titles"
+        android:entryValues="@array/pref_when2sync_values"
+        android:key="pref_when2sync"
+        android:negativeButtonText="@null"
+        android:positiveButtonText="@null"
+        android:title="When to sync"/>
 
-    <SwitchPreference
-        android:defaultValue="false"
-        android:key="pref_switch_charging_condition"
-        android:summary="Sync only while charging"
-        android:switchTextOn="1"
-        android:switchTextOff="0"
-        android:title="Enable / disable sync"/>
     <Preference
         android:defaultValue="none"
         android:title="Home WiFi name"
@@ -24,15 +27,6 @@
             android:targetClass="com.rbk.testapp.WiFiPicker"
             android:targetPackage="com.rbk.testapp"/>
     </Preference>
-
-    <ListPreference
-        android:defaultValue="-1"
-        android:entries="@array/pref_when2sync_titles"
-        android:entryValues="@array/pref_when2sync_values"
-        android:key="pref_when2sync"
-        android:negativeButtonText="@null"
-        android:positiveButtonText="@null"
-        android:title="When to sync"/>
 
     <SwitchPreference
         android:defaultValue="true"

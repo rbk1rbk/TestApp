@@ -40,7 +40,7 @@
     <EditTextPreference
         android:defaultValue=""
         android:inputType="textNoSuggestions"
-        android:key="prefsTGTURI"
+        android:key="prefsSMBURI"
         android:maxLines="1"
         android:selectAllOnFocus="true"
         android:singleLine="true"
