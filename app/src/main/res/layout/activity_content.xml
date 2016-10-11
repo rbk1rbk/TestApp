@@ -13,80 +13,100 @@
     <!--
         app:layout_behavior="@string/appbar_scrolling_view_behavior"
     -->
+<TableLayout xmlns:android="http://schemas.android.com/apk/res/android"
+             android:layout_width="fill_parent"
+             android:layout_height="fill_parent"
+             android:orientation="vertical"
+             android:nestedScrollingEnabled="false"
+             android:rowOrderPreserved="true"
+             android:minHeight="50dp"
+             android:stretchColumns="0">
 
-    <TextView
-        android:id="@+id/twPicSyncStateLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:text="PicSync state:"/>
+    <!--
+        android:nestedScrollingEnabled="false"
+    -->
+    <TableRow>
 
-    <TextView
-        android:id="@+id/twPicSyncState"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignTop="@+id/twPicSyncStateLabel"
-        android:layout_marginLeft="10dp"
-        android:layout_marginStart="10dp"
-        android:layout_toEndOf="@+id/twPicSyncStateLabel"
-        android:layout_toRightOf="@+id/twPicSyncStateLabel"
-        android:text="Unknown"/>
+        <TextView
+            android:id="@+id/twPicSyncStateLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="PicSync state:"
+            android:layout_alignParentTop="false"
+            android:layout_alignParentStart="false"
+            android:layout_alignParentLeft="true"/>
 
-    <EditText
-        android:id="@+id/txsmbUser"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@+id/twPicSyncStateLabel"
-        android:layout_marginTop="25dp"
-        android:layout_toEndOf="@+id/twsmbUser"
-        android:layout_toRightOf="@+id/twsmbUser"
-        android:ems="10"
-        android:inputType="text"
-        android:text="guest"/>
+        <TextView
+            android:id="@+id/twPicSyncState"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:text="Unknown   "/>
+    </TableRow>
+    <TableRow>
+        <TextView
+            android:text="Total images:"/>
+        <TextView
+            android:id="@+id/twTotalImages"
+            android:text="Unknown"/>
+    </TableRow>
+    <TableRow>
+        <TextView
+            android:text="Unsynced images:"/>
+        <TextView
+            android:id="@+id/twUnsyncedImages"
+            android:text="Unknown"/>
+    </TableRow>
+    <TableRow>
+        <TextView
+            android:text="NAS connectivity:"/>
+        <TextView
+            android:id="@+id/twNASConnectivity"
+            android:text="Not reacheable"/>
+    </TableRow>
+    <TableRow>
+        <TextView
+            android:text="Copying from:"/>
+    </TableRow>
 
-    <EditText
-        android:id="@+id/txsmbPWD"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@+id/twsmbUser"
-        android:layout_toEndOf="@+id/twPicSyncStateLabel"
-        android:layout_toRightOf="@+id/twPicSyncStateLabel"
-        android:ems="10"
-        android:inputType="textPassword"
-        android:labelFor="@id/txsmbPWD"/>
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <TextView
+            android:id="@+id/twCopyFrom"
+            android:text="/path/to/the/source/file.jpg"
+            android:lines="2"/>
+    </TableRow>
 
-    <TextView
-        android:id="@+id/twsmbUser"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_below="@+id/twPicSyncStateLabel"
-        android:layout_marginTop="32dp"
-        android:labelFor="@id/txsmbUser"
-        android:text="SMB User: "
-        android:textAppearance="?android:attr/textAppearanceMedium"/>
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <TextView
+            android:text="To:"/>
+    </TableRow>
 
-    <TextView
-        android:id="@+id/twsmbPWD"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignBaseline="@+id/txsmbPWD"
-        android:layout_alignBottom="@+id/txsmbPWD"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:text="SMB Pwd:"
-        android:textAppearance="?android:attr/textAppearanceMedium"/>
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <TextView
+            android:id="@+id/twCopyTo"
+            android:text="/q/w/e.jpg"
+            android:lines="2"/>
+    </TableRow>
+</TableLayout>
 
     <Button
         android:id="@+id/btnSaveSMB"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:onClick="btnSaveOnClickListener"
+        android:text="Go"
+        android:layout_alignParentBottom="true"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true"
-        android:layout_below="@+id/txsmbPWD"
-        android:onClick="btnSaveOnClickListener"
-        android:text="Save"/>
+        android:layout_marginLeft="25dp"
+        android:layout_marginStart="25dp"
+        android:layout_marginBottom="23dp"/>
+
 
 </RelativeLayout>

@@ -16,7 +16,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
 
 public class MainScreen extends AppCompatActivity {
@@ -31,8 +30,6 @@ public class MainScreen extends AppCompatActivity {
 
     private static boolean alreadyRunning=false;
     static Button button;
-    static EditText txsmbUser;
-    static EditText txsmbPWD;
     private final int READ_EXTERNAL_STORAGE_PERMISSION_CODE=101;
 
 

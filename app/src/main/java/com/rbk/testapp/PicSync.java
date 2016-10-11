@@ -23,6 +23,9 @@ import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -74,6 +77,7 @@ public class PicSync extends IntentService {
     static String smbshare=null;
     static String smbshareurl=null;
 	static NtlmPasswordAuthentication auth = null;
+	static boolean authenticated = false;
 
 	static final int cifsAllowedBrowsables = SmbFile.TYPE_WORKGROUP | SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
 	static final int cifsAllowedBrowsablesForUp = SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
@@ -287,6 +291,7 @@ public class PicSync extends IntentService {
             if (ACTION_START_SYNC.equals(action)) {
                 final String param1 = intent.getStringExtra(EXTRA_PARAM1);
                 final String param2 = intent.getStringExtra(EXTRA_PARAM2);
+				WoL();
                 handleActionStartSync(param1, param2);
                 return;
             }
@@ -587,7 +592,21 @@ public class PicSync extends IntentService {
         Log.i("PicSync","Sync started");
         getListOfFilesToSync();
         PublishState("Sync in progress");
-
+/*
+smbshare = settings.getString("prefsTGTURI", "");
+cifsfoldercontent=$(list  smbshare);
+prefFolderList = prefs.getStringSet("prefFolderList", null);
+For each folder in prefFolderList do
+	foldercontent=$(list folder) // => exclude already copied files, e.g. compare it with LastSavedFileTimestamp
+	for each file in foldercontent do
+		constructTargetPath(file)
+		check, if there already is a file with the same name
+			// if so, check settings, how to deal with it
+			if so, skip the file
+		copy file
+		if file is successfully there, log it into the file on the share
+		update some local store with its timestamp => LastSavedFileTimestamp
+ */
         saveLastCopiedImageTimestamp();
         writeLogFile("");
         readTestFile();
@@ -613,11 +632,9 @@ public class PicSync extends IntentService {
 
             // TODO Prerobit na novy thread?
             MyState = "PicSync running";
-/*
 			DoSync();
-*/
 			MyState = "PicSync has ran";
-
+			PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
             Log.i("PicSync", "handleActionStartSync: " + MyState);
             PublishState(MyState);
         }
@@ -654,7 +671,7 @@ public class PicSync extends IntentService {
         smbshare=settings.getString(MainScreen.prefsSMBSHARE,smbuser);
 */
 
-		if ((auth != null) && (!SharedPreferencesChanged))
+		if ((authenticated) && (!SharedPreferencesChanged))
             return;
 
         SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
@@ -675,18 +692,24 @@ public class PicSync extends IntentService {
 
         jcifs.Config.setProperty("jcifs.netbios.hostname", smblocalhostname);
         jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
-        if (((auth==null) || SharedPreferencesChanged) && (!smbuser.isEmpty()))
+		String exceptionString;
+		if (((auth==null) || SharedPreferencesChanged) && (!smbuser.isEmpty()))
             auth = new NtlmPasswordAuthentication(null,smbuser, smbpasswd);
 		SharedPreferencesChanged =false;
         SmbFile[] domains = null;
         try {
             domains = (new SmbFile("smb:///",auth)).listFiles();
+			authenticated=true;
         } catch (SmbException|MalformedURLException e) {
             e.printStackTrace();
-            makeToast("PicSync: connectivity issue: " + e.getMessage());
+			if (e.toString().contains("Logon failure")){
+				makeToast("Check username and password settings");
+			}
+			else
+            	makeToast("PicSync: connectivity issue: " + e.getMessage());
+			authenticated=false;
             return;
         }
-
     }
     private void writeLogFile(String message){
         SmbFile smbLogFile;
@@ -770,4 +793,84 @@ public class PicSync extends IntentService {
         }
         return str;
     }
+	public static final int PORT = 9;
+
+	public void WoL() {
+
+		String ipStr = "192.168.0.255";
+		String macStr = "1c:6f:65:90:a8:f9";
+
+		try {
+			byte[] macBytes = getMacBytes(macStr);
+			byte[] bytes = new byte[6 + 16 * macBytes.length];
+			for (int i = 0; i < 6; i++) {
+				bytes[i] = (byte) 0xff;
+			}
+			for (int i = 6; i < bytes.length; i += macBytes.length) {
+				System.arraycopy(macBytes, 0, bytes, i, macBytes.length);
+			}
+
+			InetAddress address = InetAddress.getByName(ipStr);
+			DatagramPacket packet = new DatagramPacket(bytes, bytes.length, address, PORT);
+			DatagramSocket socket = new DatagramSocket();
+			socket.send(packet);
+			socket.close();
+
+			Log.d("WoL", "Wake-on-LAN packet sent.");
+		} catch (Exception e) {
+			Log.d("WoL", "Failed to send Wake-on-LAN packet:" + e);
+		}
+
+	}
+
+	private static byte[] getMacBytes(String macStr) throws IllegalArgumentException {
+		byte[] bytes = new byte[6];
+		String[] hex = macStr.split("(\\:|\\-)");
+		if (hex.length != 6) {
+			throw new IllegalArgumentException("Invalid MAC address.");
+		}
+		try {
+			for (int i = 0; i < 6; i++) {
+				bytes[i] = (byte) Integer.parseInt(hex[i], 16);
+			}
+		} catch (NumberFormatException e) {
+			throw new IllegalArgumentException("Invalid hex digit in MAC address.");
+		}
+		return bytes;
+	}
+
+/*
+	************************************************************************************************
+*/	private static class nasService{
+		nasService(){
+
+		}
+		public void WoL() {
+
+			String ipStr = "192.168.0.255";
+			String macStr = "1c:6f:65:90:a8:f9";
+
+			try {
+				byte[] macBytes = getMacBytes(macStr);
+				byte[] bytes = new byte[6 + 16 * macBytes.length];
+				for (int i = 0; i < 6; i++) {
+					bytes[i] = (byte) 0xff;
+				}
+				for (int i = 6; i < bytes.length; i += macBytes.length) {
+					System.arraycopy(macBytes, 0, bytes, i, macBytes.length);
+				}
+
+				InetAddress address = InetAddress.getByName(ipStr);
+				DatagramPacket packet = new DatagramPacket(bytes, bytes.length, address, PORT);
+				DatagramSocket socket = new DatagramSocket();
+				socket.send(packet);
+				socket.close();
+
+				Log.d("WoL", "Wake-on-LAN packet sent.");
+			} catch (Exception e) {
+				Log.d("WoL", "Failed to send Wake-on-LAN packet:" + e);
+			}
+
+		}
+	}
 }

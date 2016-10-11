@@ -207,7 +207,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
         return PreferenceFragment.class.getName().equals(fragmentName)
                 || PreferenceFragmentSync.class.getName().equals(fragmentName)
                 || PreferenceFragmentCIFS.class.getName().equals(fragmentName)
-                       || PreferenceFragmentUpload.class.getName().equals(fragmentName)
+                || PreferenceFragmentUpload.class.getName().equals(fragmentName)
                 || PreferenceFragmentNotification.class.getName().equals(fragmentName);
     }
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
