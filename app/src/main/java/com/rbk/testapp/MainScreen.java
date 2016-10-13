@@ -29,6 +29,7 @@ public class MainScreen extends AppCompatActivity {
     public static final String prefsLITS="lastImageTimestamp";
 
     private static boolean alreadyRunning=false;
+    private static boolean MainScreenReceiverRegistered=false;
     static Button button;
     private final int READ_EXTERNAL_STORAGE_PERMISSION_CODE=101;
 
@@ -37,10 +38,31 @@ public class MainScreen extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
             Log.i("MainScreen","onReceive called");
-            Bundle bundle = intent.getExtras();
+			final String action = intent.getAction();
+			Bundle bundle = intent.getExtras();
+			String Message = bundle.getString("Message");
             if (bundle != null) {
-                String string = bundle.getString(PicSync.STATE);
-                    Log.i("MainScreen","onReceive got string "+string);
+                if (Message.equals("isNASConnected")){
+                    boolean isNASConnected = bundle.getBoolean("isNASConnected");
+                    TextView twConnectivity = (TextView) findViewById(R.id.twNASConnectivity);
+                    if (isNASConnected)
+                        twConnectivity.setText("Connected");
+                    else
+                        twConnectivity.setText("Not available");
+                }
+                if (Message.equals("msgCopyInProgress")){
+                    boolean isNASConnected = bundle.getBoolean("isNASConnected");
+                    TextView twCopyFrom = (TextView) findViewById(R.id.twCopyFrom);
+                    twCopyFrom.setText(bundle.getString("srcFile"));
+                    TextView twCopyTo = (TextView) findViewById(R.id.twCopyTo);
+					twCopyTo.setText(bundle.getString("tgtFile"));
+                }
+				if (Message.equals("State")){
+					String string = bundle.getString(PicSync.STATE);
+					TextView tw = (TextView) findViewById(R.id.twPicSyncState);
+					tw.setText(string);
+					Log.i("MainScreen","onReceive got string "+string);
+				}
 //                    MainScreen.twPicSyncState.setText(string);
 //                    Toast.makeText(MainScreen.this, "PicSync says: "+ string, Toast.LENGTH_SHORT).show();
             }
@@ -86,6 +108,9 @@ public class MainScreen extends AppCompatActivity {
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+		Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
+		PicSyncIntent.setAction(PicSync.ACTION_GET_NAS_CONNECTION);
+		this.startService(PicSyncIntent);
 
     };
 
@@ -145,6 +170,7 @@ public class MainScreen extends AppCompatActivity {
         super.onResume();
         DrawMainScreen();
         registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
+		MainScreenReceiverRegistered = true;
         Intent PicSyncIntent = new Intent(this,PicSync.class);
         PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
         this.startService(PicSyncIntent);
@@ -155,9 +181,23 @@ public class MainScreen extends AppCompatActivity {
     protected void onPause() {
         Log.i("MainScreen","onPause called");
         super.onPause();
-        unregisterReceiver(MainScreenReceiver);
-    }
-    @Override
+		if (MainScreenReceiverRegistered) {
+			unregisterReceiver(MainScreenReceiver);
+			MainScreenReceiverRegistered = false;
+		}
+	}
+
+	@Override
+	protected void onDestroy() {
+		Log.i("MainScreen","onDestroy called");
+		super.onDestroy();
+		if (MainScreenReceiverRegistered) {
+			unregisterReceiver(MainScreenReceiver);
+			MainScreenReceiverRegistered = false;
+		}
+	}
+
+	@Override
     public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
         switch (requestCode) {
             case READ_EXTERNAL_STORAGE_PERMISSION_CODE: {

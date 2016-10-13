@@ -67,6 +67,11 @@ public class PicSyncScheduler extends Service {
 			evaluateTheNeedOfSync();
 		}
 
+/*
+		Toto dava pri odpojeni napajania exception
+		                                  java.lang.IllegalStateException: Unknown URL: content://media/external
+
+*/
 		private String getImagePath(Uri uri) {
 			Cursor cursor = getContentResolver().query(uri, null, null, null, null);
 			cursor.moveToFirst();
@@ -162,6 +167,9 @@ public class PicSyncScheduler extends Service {
 					evaluateTheNeedOfSync();
 				}
 			}
+			Intent PicSyncIntent=new Intent(myContext,PicSync.class);
+			PicSyncIntent.setAction(PicSync.ACTION_GET_NAS_CONNECTION);
+			myContext.startService(PicSyncIntent);
 /*
 			Intent PicSyncIntent = new Intent(this, PicSync.class);
 			if (actionForPicSync == eactionForPicSync.GO)

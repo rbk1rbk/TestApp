@@ -45,6 +45,8 @@ import jcifs.smb.SmbFileFilter;
 import jcifs.smb.SmbFileInputStream;
 import jcifs.smb.SmbFileOutputStream;
 
+import static java.lang.Thread.sleep;
+
 /**
  * An {@link IntentService} subclass for handling asynchronous task requests in
  * a service on a separate handler thread.
@@ -57,7 +59,7 @@ public class PicSync extends IntentService {
     public static final String NOTIFICATION = "com.rbk.testapp.MainScreen.receiver";
 
     private static String MyState = "Not running";
-    private static Context ParentContext;
+    private final Context MyContext = this;
 	private static IBinder myBinder;
 
     static final String ACTION_GET_STATE = "com.rbk.testapp.PicSync.action.GetState";
@@ -67,6 +69,8 @@ public class PicSync extends IntentService {
 	static final String ACTION_BROWSE_CIFS = "com.rbk.testapp.PicSync.action.BrowseCIFS";
 	static final String ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS = "com.rbk.testapp.PicSync.action.addMediaFolders";
 	static final String ACTION_GET_STORAGE_PATHS = "com.rbk.testapp.PicSync.action.getStoragePaths";
+	static final String ACTION_GET_NAS_CONNECTION = "com.rbk.testapp.PicSync.action.getNASConnection";
+
 
     static String smblocalhostname = "testovacimobil";
     static String picSyncLogFile = "testapp."+smblocalhostname+".log";
@@ -78,6 +82,7 @@ public class PicSync extends IntentService {
     static String smbshareurl=null;
 	static NtlmPasswordAuthentication auth = null;
 	static boolean authenticated = false;
+	static boolean isNASConnected = false;
 
 	static final int cifsAllowedBrowsables = SmbFile.TYPE_WORKGROUP | SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
 	static final int cifsAllowedBrowsablesForUp = SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
@@ -97,8 +102,12 @@ public class PicSync extends IntentService {
     private enum ePicSyncState {PIC_SYNC_STATE_STOPPED, PIC_SYNC_STATE_RUNNING, PIC_SYNC_STATE_NO_ACCESS };
     private static ePicSyncState PicSyncState=ePicSyncState.PIC_SYNC_STATE_STOPPED;
 
+	private final NASService nasService = new NASService(MyContext);
     public PicSync() {
         super("PicSync");
+/*
+		nasService = new NASService();
+*/
     }
 
 	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
@@ -142,18 +151,6 @@ public class PicSync extends IntentService {
 		return myBinder;
 	}
 
-	private boolean isRealDirectory(String file) {
-		boolean returnvalue = true;
-		try {
-			if (!file.endsWith(File.separator))
-				file = file + File.separator;
-			new SmbFile(file, auth).list();
-		} catch (SmbException | MalformedURLException e) {
-			returnvalue = false;
-		}
-		return returnvalue;
-	}
-
 	SmbFileFilter browseCIFSFilter = new SmbFileFilter() {
 		@Override
 		public boolean accept(SmbFile file) {
@@ -191,7 +188,7 @@ public class PicSync extends IntentService {
 		int smbtype = 0;
 		boolean canReadDir = true;
 		try {
-			establishSMB();
+			NASService.openConnection();
 			//Check, whether it is not a smb://server/../ format
 			String pathToCheckWithoutDoubleDots = path.replaceAll("\\.\\.\\/$", "");
 			if (path.endsWith(".." + File.separator) && (new SmbFile(pathToCheckWithoutDoubleDots, auth).getType() & SmbFile.TYPE_SERVER) == SmbFile.TYPE_SERVER)
@@ -240,7 +237,7 @@ public class PicSync extends IntentService {
 		} catch (SmbException e) {
 			e.printStackTrace();
 		}
-
+		broadcastConnectionStatus();
 		Collections.sort(values);
 		Intent returnCIFSListIntent = new Intent("CIFSList");
 		returnCIFSListIntent.putExtra("cifsList", (String[]) values.toArray(new String[values.size()]));
@@ -253,15 +250,28 @@ public class PicSync extends IntentService {
 
 	private void PublishState(String State2Send) {
         Intent intent = new Intent(NOTIFICATION);
+		intent.putExtra("Message", "State");
         intent.putExtra(STATE, State2Send);
         sendBroadcast(intent);
     }
-
+	private void broadcastConnectionStatus() {
+		Intent updateIntent = new Intent(NOTIFICATION);
+		updateIntent.putExtra("Message", "isNASConnected");
+		updateIntent.putExtra("isNASConnected", isNASConnected);
+		sendBroadcast(updateIntent);
+	}
+	private void broadcastCopyInProgress(String srcFile, String tgtFile) {
+		Intent updateIntent = new Intent(NOTIFICATION);
+		updateIntent.putExtra("Message", "msgCopyInProgress");
+		updateIntent.putExtra("srcFile", srcFile);
+		updateIntent.putExtra("tgtFile", tgtFile);
+		sendBroadcast(updateIntent);
+	}
     private void makeToast(final String toastString){
-        h = new Handler(this.getMainLooper());
+        h = new Handler(MyContext.getMainLooper());
         h.post(new Runnable() {
             @Override
-            public void run() {Toast.makeText(PicSync.this,toastString,Toast.LENGTH_LONG).show();}
+            public void run() {Toast.makeText(MyContext,toastString,Toast.LENGTH_LONG).show();}
         });
     }
 
@@ -312,9 +322,12 @@ public class PicSync extends IntentService {
 				LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnstoragePathsIntent);
 				return;
 			}
+			if (ACTION_GET_NAS_CONNECTION.equals(action)){
+				NASService.checkConnection();
+				broadcastConnectionStatus();
+			}
 		}
     }
-
 	private void addMediaFoldersToSettings() {
 		String[] MediaFolderList = getMediaPaths(getStoragePaths());
 		Intent returnMediaFoldersListIntent = new Intent("getMediaFoldersList");
@@ -539,59 +552,50 @@ public class PicSync extends IntentService {
         }
         return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
     }
-    private void getListOfFilesToSync(){
-        String[] storagePaths = getStoragePaths();
-        String[] mediaPaths = getMediaPaths(storagePaths);
-        int numOfFiles = 0;
 
-        for (String mediaPath : mediaPaths){
-            String[] mediaFiles=listPictures(mediaPath);
-            numOfFiles+=mediaFiles.length;
-/*
-            File path=new File(mediaDir);
-            File[] filelist = path.listFiles(pictureFileFilter);
-            numOfFiles+=filelist.length;
-*/
-        }
-/*
+	private void getListOfFilesToSync() {
+		int numOfFiles = 0;
 
-        try {
-//            Process process = Runtime.getRuntime().exec("find /storage/0D63-F320/ -iname '*.jpg' -o -iname '*.mp4'");
-//            Process process = Runtime.getRuntime().exec(new String[]{"find","."});
-//            Process process = Runtime.getRuntime().exec(new String[]{"/system/bin/sh -c find \"storage/0D63-F320/\""});
-            Process process;
-//            process = Runtime.getRuntime().exec(new String[]{"/system/bin/echo 'find / -name DCIM' | /system/bin/sh"});
-            process = Runtime.getRuntime().exec(new String[]{"/system/bin/sh","-c","/system/bin/find / -name DCIM"});
-            try {
-//                process.wait(5000);
-                process.getInputStream();
-                process.waitFor();
-            }catch (java.lang.InterruptedException e){
-                    e.printStackTrace();
-            }
-            Integer exitVal = process.exitValue();
-            Log.i("find retval ",exitVal.toString());
-            if (exitVal == 0) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                String thisLine = null;
-                while ((thisLine = in.readLine()) != null) {
-                    Log.i("picture found", thisLine);
-                }
-            }
-    } catch (java.io.IOException e) {
-        e.printStackTrace();
-    }
-*/
-        makeToast("Found " + numOfFiles + " files in "+mediaPaths.length+ " media dirs.");
-    }
+		Set<String> mediaPaths = settings.getStringSet("prefFolderList", null);
+		for (String mediaPath : mediaPaths) {
+			String[] mediaFiles = listPictures(mediaPath);
+			numOfFiles += mediaFiles.length;
+		}
+		makeToast("Found " + numOfFiles + " files in " + mediaPaths.size() + " media dirs.");
+	}
     public void StopSync() {
         Log.i("PicSync", "StopSync()");
     }
-
     public void DoSync(){
         Log.i("PicSync","Sync started");
-        getListOfFilesToSync();
         PublishState("Sync in progress");
+		SmbFile tgtMediaFile;
+		Set<String> mediaPaths = settings.getStringSet("prefFolderList", null);
+		String tgtPath= settings.getString("prefsSMBURI", null);
+		for (String mediaPath : mediaPaths) {
+			String[] mediaFiles = listPictures(mediaPath);
+			for (String srcMediaFileFull : mediaFiles){
+				File mediaFile = new File(srcMediaFileFull);
+				String srcMediaFileName	= mediaFile.getName();
+				String tgtMediaFileNameFull = tgtPath+"/"+srcMediaFileName;
+				broadcastCopyInProgress(srcMediaFileFull,tgtMediaFileNameFull);
+				Log.d("DoSync",tgtMediaFileNameFull);
+				try {
+					tgtMediaFile = new SmbFile(tgtMediaFileNameFull);
+					try {
+						sleep(1000);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				} catch (MalformedURLException e) {
+					e.printStackTrace();
+					PicSyncState=ePicSyncState.PIC_SYNC_STATE_STOPPED;
+					PublishState("NAS error");
+					return;
+				}
+			}
+		}
+
 /*
 smbshare = settings.getString("prefsTGTURI", "");
 cifsfoldercontent=$(list  smbshare);
@@ -608,8 +612,10 @@ For each folder in prefFolderList do
 		update some local store with its timestamp => LastSavedFileTimestamp
  */
         saveLastCopiedImageTimestamp();
+/*
         writeLogFile("");
         readTestFile();
+*/
         Log.i("PicSync","Sync finished");
         PublishState("Sync finished");
     }
@@ -662,66 +668,19 @@ For each folder in prefFolderList do
     private void saveLastCopiedImageTimestamp(){
         saveLastCopiedImageTimestamp(new Date());
     }
-    private void establishSMB(){
-/*
-        SharedPreferences settings = getSharedPreferences(MainScreen.prefsSMBPREFS, 0);
-        smbservername=settings.getString(MainScreen.prefsSMBSRV,"192.168.0.1");
-        smbuser=settings.getString(MainScreen.prefsSMBUSER,"");
-        smbpasswd=settings.getString(MainScreen.prefsSMBPWD,"PASSWORD");
-        smbshare=settings.getString(MainScreen.prefsSMBSHARE,smbuser);
-*/
-
-		if ((authenticated) && (!SharedPreferencesChanged))
-            return;
-
-        SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
-        smbservername = settings.getString(getString(R.string.pref_cifs_server), "");
-		smbuser = settings.getString(getString(R.string.pref_cifs_user), "");
-		smbpasswd = settings.getString(getString(R.string.pref_cifs_password), "");
-		smbshare = settings.getString(getString(R.string.pref_cifs_share), "");
-
-/*
-        smbuser=settings.getString("prefsSMBUSER","");
-        smbpasswd=settings.getString("prefsSMBPWD","PASSWORD");
-        smbshare=settings.getString("prefsSMBSHARE",smbuser);
-*/
-        smbshareurl="smb://"+smbservername+"/"+smbshare+"/";
-/*
-        smbshareurl = settings.getString("prefsTGTURI", "");
-*/
-
-        jcifs.Config.setProperty("jcifs.netbios.hostname", smblocalhostname);
-        jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
-		String exceptionString;
-		if (((auth==null) || SharedPreferencesChanged) && (!smbuser.isEmpty()))
-            auth = new NtlmPasswordAuthentication(null,smbuser, smbpasswd);
-		SharedPreferencesChanged =false;
-        SmbFile[] domains = null;
-        try {
-            domains = (new SmbFile("smb:///",auth)).listFiles();
-			authenticated=true;
-        } catch (SmbException|MalformedURLException e) {
-            e.printStackTrace();
-			if (e.toString().contains("Logon failure")){
-				makeToast("Check username and password settings");
-			}
-			else
-            	makeToast("PicSync: connectivity issue: " + e.getMessage());
-			authenticated=false;
-            return;
-        }
-    }
     private void writeLogFile(String message){
         SmbFile smbLogFile;
         SmbFileOutputStream smbLogFileOutputStream;
-        establishSMB();
         try{
+			NASService.openConnection();
             smbLogFile=new SmbFile(smbshareurl+"/"+picSyncLogFile,auth);
 //            smbLogFile.setAttributes();
             smbLogFileOutputStream= (SmbFileOutputStream) smbLogFile.getOutputStream();
-        }catch (IOException e){
+			broadcastConnectionStatus();
+		}catch (IOException e){
             e.printStackTrace();
-            return;
+			broadcastConnectionStatus();
+			return;
         }
 /*
         try {
@@ -736,12 +695,13 @@ For each folder in prefFolderList do
         }catch (IOException e){
             e.printStackTrace();
         }
-    }
+		broadcastConnectionStatus();
+	}
     public void readTestFile() {
-        establishSMB();
         SmbFile sfile;
         SmbFileInputStream in;
         try {
+			NASService.openConnection();
             fileurl="smb://"+smbservername+"/testexport/somefile.txt";
             Log.i("PicSync","Opening file: "+fileurl);
             sfile = new SmbFile(fileurl,auth);
@@ -770,28 +730,6 @@ For each folder in prefFolderList do
         }catch (IOException e){
             e.printStackTrace();
         }
-    }
-    public String ping(String url) {
-        String str = "";
-        try {
-            Process process = Runtime.getRuntime().exec("/system/bin/ping -c 8 " + url);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(
-                    process.getInputStream()));
-            int i;
-            char[] buffer = new char[4096];
-            StringBuffer output = new StringBuffer();
-            while ((i = reader.read(buffer)) > 0)
-                output.append(buffer, 0, i);
-            reader.close();
-
-            // body.append(output.toString()+"\n");
-            str = output.toString();
-            // Log.d(TAG, str);
-        } catch (IOException e) {
-            // body.append("Error\n");
-            e.printStackTrace();
-        }
-        return str;
     }
 	public static final int PORT = 9;
 
@@ -841,36 +779,126 @@ For each folder in prefFolderList do
 
 /*
 	************************************************************************************************
-*/	private static class nasService{
-		nasService(){
+*/
+private static class NASService {
+	private static Context MyContext;
+	NASService(Context ctx) {
+		MyContext = ctx;
 
+/*
+		if (settings == null)
+			settings = PreferenceManager.getDefaultSharedPreferences(MyContext);
+*/
+	}
+
+	public static boolean checkConnection(){
+		isNASConnected = true;
+		try {
+			(new SmbFile("smb://"+smbservername+"/", auth)).list();
+		} catch (SmbException | MalformedURLException e) {
+			e.printStackTrace();
+			isNASConnected = false;
 		}
-		public void WoL() {
+		return isNASConnected;
+	}
+	public static void openConnection() throws MalformedURLException {
+		if ((authenticated) && (!SharedPreferencesChanged))
+			return;
 
-			String ipStr = "192.168.0.255";
-			String macStr = "1c:6f:65:90:a8:f9";
+		smbservername = settings.getString(MyContext.getString(R.string.pref_cifs_server), "");
+		smbuser = settings.getString(MyContext.getString(R.string.pref_cifs_user), "");
+		smbpasswd = settings.getString(MyContext.getString(R.string.pref_cifs_password), "guest");
+		smbshare = settings.getString(MyContext.getString(R.string.pref_cifs_share), "");
 
-			try {
-				byte[] macBytes = getMacBytes(macStr);
-				byte[] bytes = new byte[6 + 16 * macBytes.length];
-				for (int i = 0; i < 6; i++) {
-					bytes[i] = (byte) 0xff;
-				}
-				for (int i = 6; i < bytes.length; i += macBytes.length) {
-					System.arraycopy(macBytes, 0, bytes, i, macBytes.length);
-				}
+		if (smbshare.equals(""))
+			smbshareurl = "smb://" + smbservername + "/";
+		else
+			smbshareurl = "smb://" + smbservername + "/" + smbshare + "/";
 
-				InetAddress address = InetAddress.getByName(ipStr);
-				DatagramPacket packet = new DatagramPacket(bytes, bytes.length, address, PORT);
-				DatagramSocket socket = new DatagramSocket();
-				socket.send(packet);
-				socket.close();
-
-				Log.d("WoL", "Wake-on-LAN packet sent.");
-			} catch (Exception e) {
-				Log.d("WoL", "Failed to send Wake-on-LAN packet:" + e);
-			}
-
+		jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
+		String exceptionString;
+		if (((auth == null) || SharedPreferencesChanged) && (!smbuser.isEmpty()))
+			auth = new NtlmPasswordAuthentication(null, smbuser, smbpasswd);
+		SharedPreferencesChanged = false;
+		isNASConnected = true;
+		SmbFile[] domains = null;
+		SmbFile domainsFile = null;
+		try {
+			domainsFile = new SmbFile("smb:///", auth);
+		}catch (MalformedURLException e) {
+			isNASConnected = false;
+			throw e;
+		};
+		try{
+			domains = domainsFile.listFiles();
+			authenticated = true;
+		} catch (SmbException e) {
+			isNASConnected = false;
+			e.printStackTrace();
+			if (e.toString().contains("Logon failure")) {
+				makeToast("Check username and password settings");
+			} else
+				makeToast("PicSync: connectivity issue: " + e.getMessage());
+			authenticated = false;
+			return;
 		}
 	}
+
+	public String ping(String url) {
+		String str = "";
+		try {
+			Process process = Runtime.getRuntime().exec("/system/bin/ping -c 8 " + url);
+			BufferedReader reader = new BufferedReader(new InputStreamReader(
+					process.getInputStream()));
+			int i;
+			char[] buffer = new char[4096];
+			StringBuffer output = new StringBuffer();
+			while ((i = reader.read(buffer)) > 0)
+				output.append(buffer, 0, i);
+			reader.close();
+
+			// body.append(output.toString()+"\n");
+			str = output.toString();
+			// Log.d(TAG, str);
+		} catch (IOException e) {
+			// body.append("Error\n");
+			e.printStackTrace();
+		}
+		return str;
+	}
+
+	public static void WoL() {
+
+		String ipStr = "192.168.0.255";
+		String macStr = "1c:6f:65:90:a8:f9";
+
+		try {
+			byte[] macBytes = getMacBytes(macStr);
+			byte[] bytes = new byte[6 + 16 * macBytes.length];
+			for (int i = 0; i < 6; i++) {
+				bytes[i] = (byte) 0xff;
+			}
+			for (int i = 6; i < bytes.length; i += macBytes.length) {
+				System.arraycopy(macBytes, 0, bytes, i, macBytes.length);
+			}
+
+			InetAddress address = InetAddress.getByName(ipStr);
+			DatagramPacket packet = new DatagramPacket(bytes, bytes.length, address, PORT);
+			DatagramSocket socket = new DatagramSocket();
+			socket.send(packet);
+			socket.close();
+
+			Log.d("WoL", "Wake-on-LAN packet sent.");
+		} catch (Exception e) {
+			Log.d("WoL", "Failed to send Wake-on-LAN packet:" + e);
+		}
+	}
+	private static void makeToast(final String toastString){
+		h = new Handler(MyContext.getMainLooper());
+		h.post(new Runnable() {
+			@Override
+			public void run() {Toast.makeText(MyContext,toastString,Toast.LENGTH_LONG).show();}
+		});
+	}
+}
 }

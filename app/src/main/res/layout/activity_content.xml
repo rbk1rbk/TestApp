@@ -74,7 +74,12 @@
         <TextView
             android:id="@+id/twCopyFrom"
             android:text="/path/to/the/source/file.jpg"
-            android:lines="2"/>
+            android:lines="2"
+            android:maxHeight="300dp"
+            android:singleLine="false"
+            android:ellipsize="none"
+            android:scrollHorizontally="false"
+            android:textColor="@color/colorPrimaryDark"/>
     </TableRow>
 
     <TableRow
@@ -91,7 +96,9 @@
         <TextView
             android:id="@+id/twCopyTo"
             android:text="/q/w/e.jpg"
-            android:lines="2"/>
+            android:lines="2"
+            android:maxHeight="300dp"
+            android:singleLine="false"/>
     </TableRow>
 </TableLayout>
 
