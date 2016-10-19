@@ -2,10 +2,14 @@ package com.rbk.testapp;
 
 import android.Manifest;
 import android.app.IntentService;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
@@ -104,6 +108,7 @@ public class PicSync extends IntentService {
 	private static Integer mediaFilesCountTotal = 0;
 	private static Integer mediaFilesScanned = 0;
 	private static Integer mediaFilesCountToSync = 0;
+	private static MediaFilesDBclass MediaFilesDB;
 
 	private enum ePicSyncState {PIC_SYNC_STATE_STOPPED, PIC_SYNC_STATE_RUNNING, PIC_SYNC_STATE_NO_ACCESS, PIC_SYNC_STATE_STOP}
 
@@ -149,6 +154,7 @@ public class PicSync extends IntentService {
 			e.printStackTrace();
 		}
 		lastCopiedImageTimestamp = new Date(timestampFile.lastModified());
+		MediaFilesDB = new MediaFilesDBclass(MyContext);
 		broadcastLastCopiedImageTimestamp();
 		startService(intent);
 	}
@@ -630,11 +636,6 @@ public class PicSync extends IntentService {
         }
         return mediaPathsSet.toArray(new String[mediaPathsSet.size()]);
     }
-    public void StopSync() {
-		PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOP;
-		Log.i("PicSync", "StopSync()");
-    }
-
 	private Set<String> listMediaFilesToSync() {
 		broadcastState("Scanning media");
 		mediaFilesCountTotal = 0;
@@ -656,7 +657,10 @@ public class PicSync extends IntentService {
 
 		String tgtPath = settings.getString("prefsSMBURI", null);
 		for (String mediaPath : mediaPaths) {
+/*
 			String[] mediaFiles = listPictures(mediaPath, "TimeStampCondition");
+*/
+			String[] mediaFiles = listPictures(mediaPath);
 			for (String srcMediaFileFull : mediaFiles) {
 				if (!isNASConnected)
 					try {
@@ -704,6 +708,68 @@ public class PicSync extends IntentService {
 		return fileListToSync;
 	}
 
+	private void getMediaFilesToSync() {
+		broadcastState("Scanning media");
+		mediaFilesCountTotal = 0;
+		mediaFilesScanned = 0;
+		mediaFilesCountToSync = 0;
+		SmbFile tgtMediaFile;
+		Set<String> mediaPaths = settings.getStringSet("prefFolderList", null);
+		SQLiteDatabase db = MediaFilesDB.getWritableDatabase();
+		if (mediaPaths == null) {
+			broadcastCopyInProgress("none", "none");
+			return;
+		}
+
+		String tgtPath = settings.getString("prefsSMBURI", null);
+		long newRowId;
+		for (String mediaPath : mediaPaths) {
+			String[] mediaFiles = listPictures(mediaPath);
+			for (String srcMediaFileNameFull : mediaFiles) {
+				File mediaFile = new File(srcMediaFileNameFull);
+/*
+				String srcMediaFileName = srcMediaFileNameFull.substring(srcMediaFileNameFull.lastIndexOf('/') + 1);
+*/
+				String srcMediaFileName = mediaFile.getName();
+				String tgtMediaFileNameFull = tgtPath + "/" + srcMediaFileName;
+				Long lastModified = mediaFile.lastModified();
+				ContentValues mediaFilePair = new ContentValues();
+				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC, srcMediaFileNameFull);
+				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TGT, tgtMediaFileNameFull);
+				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TS, lastModified);
+				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC, false);
+				mediaFilesScanned++;
+				newRowId = db.insert(Constants.MediaFilesDBEntry.TABLE_NAME, null, mediaFilePair);
+			}
+			Cursor c = db.rawQuery("select count (*) from " + Constants.MediaFilesDBEntry.TABLE_NAME, null);
+			c.moveToFirst();
+			mediaFilesCountTotal = c.getInt(0);
+			c.close();
+			Cursor cToSync = db.rawQuery("select count (*) from " + Constants.MediaFilesDBEntry.TABLE_NAME
+					+ "where " + Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + "==0", null);
+			cToSync.moveToFirst();
+			mediaFilesCountToSync = cToSync.getInt(0);
+			cToSync.close();
+			Cursor cHighestSyncedTimestamp = db.rawQuery("select max("
+							+ Constants.MediaFilesDBEntry.COLUMN_NAME_TS + ")"
+							+ " from "
+							+ Constants.MediaFilesDBEntry.TABLE_NAME
+							+ " where "
+							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + "==1"
+					, null);
+			cHighestSyncedTimestamp.moveToFirst();
+			long highestSyncedTimestamp = cHighestSyncedTimestamp.getLong(0);
+			if (highestSyncedTimestamp == 0)
+				saveLastCopiedImageTimestamp(1);
+			else
+				saveLastCopiedImageTimestamp(highestSyncedTimestamp);
+			cHighestSyncedTimestamp.close();
+			broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
+		}
+		/*TODO
+		Sort by timestamp!!!
+		 */
+	}
 	private boolean copyFileToNAS(String src, String tgt) {
 		try {
 			sleep(100);
@@ -713,8 +779,13 @@ public class PicSync extends IntentService {
 		return true;
 	}
 
+	public void StopSync() {
+		PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOP;
+		Log.i("PicSync", "StopSync()");
+	}
 	public void DoSync() {
 		Log.i("PicSync", "Sync initiaged");
+		getMediaFilesToSync();
 		Set<String> mediaFilesToSync = listMediaFilesToSync();
 		if (mediaFilesToSync != null) {
 			for (String srcMediaFileFull : mediaFilesToSync) {
@@ -911,6 +982,42 @@ public class PicSync extends IntentService {
 		return bytes;
 	}
 
+	/*
+		************************************************************************************************
+	*/
+	private static class MediaFilesDBclass extends SQLiteOpenHelper {
+		public static final int DATABASE_VERSION = 1;
+		public static final String DATABASE_NAME = "PicSync.db";
+
+		public MediaFilesDBclass(Context ctx) {
+			super(ctx, DATABASE_NAME, null, DATABASE_VERSION);
+		}
+
+		public void onCreate(SQLiteDatabase db) {
+
+			final String TABLE_CREATE = "create table " + Constants.MediaFilesDBEntry.TABLE_NAME + "("
+					+ Constants.MediaFilesDBEntry.TABLE_NAME + "_ID INTEGER PRIMARY KEY, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC + " TEXT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " TEXT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_TS + " INTEGER, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + " INTEGER, "
+					+ "CONSTRAINT srcFile_unique UNIQUE (" + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC + ")"
+					+ ")";
+			db.execSQL(TABLE_CREATE);
+
+		}
+
+		public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+			db.execSQL("backup data");
+			db.execSQL("delete");
+			onCreate(db);
+			db.execSQL("restore data");
+		}
+
+		public void onDowngrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+			onUpgrade(db, oldVersion, newVersion);
+		}
+	}
 /*
 	************************************************************************************************
 */
