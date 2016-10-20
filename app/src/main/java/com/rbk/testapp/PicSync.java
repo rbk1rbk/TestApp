@@ -649,11 +649,14 @@ public class PicSync extends IntentService {
 		}
 		Set<String> fileListToSync = new HashSet<String>();
 
+/*
 		for (String mediaPath : mediaPaths) {
 			String[] mediaFiles = listPictures(mediaPath);
 			mediaFilesCountTotal += mediaFiles.length;
 		}
+		mediaFilesCountTotal
 		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
+*/
 
 		String tgtPath = settings.getString("prefsSMBURI", null);
 		for (String mediaPath : mediaPaths) {
@@ -698,8 +701,10 @@ public class PicSync extends IntentService {
 					broadcastState("NAS error");
 					return null;
 				}
+/*
 				mediaFilesCountToSync = fileListToSync.size();
 				broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
+*/
 			}
 		}
 		/*TODO
@@ -737,7 +742,7 @@ public class PicSync extends IntentService {
 				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC, srcMediaFileNameFull);
 				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TGT, tgtMediaFileNameFull);
 				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TS, lastModified);
-				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC, false);
+				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC, 0);
 				mediaFilesScanned++;
 				newRowId = db.insert(Constants.MediaFilesDBEntry.TABLE_NAME, null, mediaFilePair);
 			}
@@ -746,7 +751,7 @@ public class PicSync extends IntentService {
 			mediaFilesCountTotal = c.getInt(0);
 			c.close();
 			Cursor cToSync = db.rawQuery("select count (*) from " + Constants.MediaFilesDBEntry.TABLE_NAME
-					+ "where " + Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + "==0", null);
+					+ " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + " = 0", null);
 			cToSync.moveToFirst();
 			mediaFilesCountToSync = cToSync.getInt(0);
 			cToSync.close();
@@ -766,6 +771,7 @@ public class PicSync extends IntentService {
 			cHighestSyncedTimestamp.close();
 			broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 		}
+		db.close();
 		/*TODO
 		Sort by timestamp!!!
 		 */
@@ -804,8 +810,10 @@ public class PicSync extends IntentService {
 				String tgtMediaFileNameFull = tgtPath + "/" + srcMediaFileName;
 				if (copyFileToNAS(srcMediaFileFull, tgtMediaFileNameFull)) {
 					mediaFilesCountToSync--;
+/*
 					broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 					broadcastCopyInProgress(srcMediaFileFull, tgtMediaFileNameFull);
+*/
 					long srcFileLastModified = new File(srcMediaFileFull).lastModified();
 					if (srcFileLastModified > lastCopiedImageTimestamp.getTime()) {
 						saveLastCopiedImageTimestamp(srcFileLastModified);
