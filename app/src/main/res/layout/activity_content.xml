@@ -39,32 +39,32 @@
     <TableLayout
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
         android:minHeight="50dp"
         android:nestedScrollingEnabled="false"
         android:orientation="vertical"
         android:rowOrderPreserved="true"
-        android:stretchColumns="0"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true">
+        android:stretchColumns="0">
 
         <TableRow>
 
             <TextView
-                android:layout_column="0"
                 android:id="@+id/twPicSyncStateLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentLeft="true"
                 android:layout_alignParentStart="false"
                 android:layout_alignParentTop="false"
+                android:layout_column="0"
                 android:text="PicSync state:"/>
 
             <TextView
-                android:layout_column="1"
                 android:id="@+id/twPicSyncState"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
+                android:layout_column="1"
                 android:text="Unknown   "/>
         </TableRow>
 
@@ -75,8 +75,8 @@
                 android:text="Total images:"/>
 
             <TextView
-                android:layout_column="1"
                 android:id="@+id/twTotalImages"
+                android:layout_column="1"
                 android:text="Unknown"/>
         </TableRow>
 
@@ -87,8 +87,8 @@
                 android:text="Scanned images:"/>
 
             <TextView
-                android:layout_column="1"
                 android:id="@+id/twScannedImages"
+                android:layout_column="1"
                 android:text="Unknown"/>
         </TableRow>
 
@@ -99,8 +99,8 @@
                 android:text="Unsynced images:"/>
 
             <TextView
-                android:layout_column="1"
                 android:id="@+id/twUnsyncedImages"
+                android:layout_column="1"
                 android:text="Unknown"/>
         </TableRow>
 
@@ -111,8 +111,8 @@
                 android:text="Last successfull sync:"/>
 
             <TextView
-                android:layout_column="1"
                 android:id="@+id/twLastSyncedImage"
+                android:layout_column="1"
                 android:text="Unknown"/>
         </TableRow>
 
@@ -123,54 +123,77 @@
                 android:text="NAS connectivity:"/>
 
             <TextView
-                android:layout_column="1"
                 android:id="@+id/twNASConnectivity"
+                android:layout_column="1"
                 android:text="Not reacheable"/>
         </TableRow>
 
-        <TableRow>
-
-            <TextView
-                android:layout_span="2"
-                android:text="Copying from:"/>
-        </TableRow>
-
         <TableRow
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
 
-            <TextView
+            android:id="@+id/copyProgressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="100dp"
+            android:ellipsize="none"
+            android:visibility="invisible">
+
+            <TableLayout
                 android:layout_span="2"
-                android:id="@+id/twCopyFrom"
+                android:layout_column="0"
                 android:ellipsize="none"
-                android:lines="2"
-                android:maxHeight="300dp"
-                android:scrollHorizontally="false"
-                android:singleLine="false"
-                android:text="/path/to/the/source/file.jpg"
-                android:textColor="@color/colorPrimaryDark"/>
-        </TableRow>
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
 
-        <TableRow
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
+                android:minHeight="50dp"
+                android:nestedScrollingEnabled="false"
+                android:orientation="vertical"
+                android:rowOrderPreserved="true"
+                android:stretchColumns="0">
+                <!--                android:layout_alignParentLeft="true"
+                                android:layout_alignParentStart="true"
+                                android:layout_alignParentTop="true"-->
+                <TableRow>
 
-            <TextView
-                android:layout_span="2"
-                android:text="To:"/>
-        </TableRow>
+                    <TextView
+                        android:text="Copying from:"
+                        android:layout_span="2"
+                        android:ellipsize="none"/>
+                </TableRow>
+<!--
+                android:text="/very/very/very/loooooong/path/to/an/image/yeah.jpg"
+-->
 
-        <TableRow
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
+                <TableRow>
 
-            <TextView
-                android:layout_span="2"
-                android:id="@+id/twCopyTo"
-                android:lines="2"
-                android:maxHeight="300dp"
-                android:singleLine="false"
-                android:text="/q/w/e.jpg"/>
+                    <TextView
+                        android:id="@+id/twCopyFrom"
+                        android:lines="2"
+                        android:scrollHorizontally="false"
+                        android:text=""
+                        android:ellipsize="none"
+                        android:layout_span="2"/>
+                </TableRow>
+
+                <TableRow
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content">
+
+                    <TextView
+                        android:text="To:"
+                        android:layout_span="2"/>
+                </TableRow>
+
+                <TableRow
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content">
+
+                    <TextView
+                        android:id="@+id/twCopyTo"
+                        android:lines="2"
+                        android:maxHeight="100dp"
+                        android:text=""/>
+                </TableRow>
+            </TableLayout>
         </TableRow>
     </TableLayout>
 </RelativeLayout>

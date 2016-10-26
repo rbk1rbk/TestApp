@@ -197,11 +197,11 @@ public class WifiWatchdogService extends Service {
 			}
 		}
 
-		Intent PicSyncIntent = new Intent(this, PicSync.class);
+/*		Intent PicSyncIntent = new Intent(this, PicSync.class);
 		if (actionForPicSync == eactionForPicSync.GO)
 			PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
 		else
 			PicSyncIntent.setAction(PicSync.ACTION_STOP_SYNC);
-		startService(PicSyncIntent);
+		startService(PicSyncIntent);*/
 	}
 }

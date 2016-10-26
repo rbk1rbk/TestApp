@@ -21,10 +21,14 @@ import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.util.Log;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class PicSyncScheduler extends Service {
 	static private boolean onUnmeteredNetwork = false;
 	static private boolean onHomeWifi = false;
-	static private boolean isconnected = false;
+	static private boolean isConnected = false;
+	static private boolean isConnectedToWifi = false;
 	static private boolean isChargingCondition = false;
 	static private boolean isCharging = false;
 	static private boolean chargerEventReceiverRegistered = false;
@@ -32,6 +36,9 @@ public class PicSyncScheduler extends Service {
 	static private boolean isChangeInMediaFoldersRegistered = false;
 	static private int nextWakeUpTime = 0;
 	int callBack = 0;
+
+	int connType;
+	WifiManager wifiManager = null;
 
 	private final Context myContext = this;
 
@@ -62,34 +69,16 @@ public class PicSyncScheduler extends Service {
 		@Override
 		public void onChange(boolean selfChange, Uri uri) {
 			changeInMediaFolders = true;
+/*
 			String filePath;
 			filePath = getImagePath(uri);
+*/
+			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
+			PicSyncIntent.setAction(PicSync.ACTION_SUGGEST_MEDIAURI_SCAN);
+			PicSyncIntent.putExtra("uri",uri.toString());
+			myContext.startService(PicSyncIntent);
 			evaluateTheNeedOfSync();
 		}
-
-/*
-		Toto dava pri odpojeni napajania exception
-		                                  java.lang.IllegalStateException: Unknown URL: content://media/external
-
-*/
-		private String getImagePath(Uri uri) {
-			Cursor cursor = getContentResolver().query(uri, null, null, null, null);
-			cursor.moveToFirst();
-			String document_id = cursor.getString(0);
-			document_id = document_id.substring(document_id.lastIndexOf(":") + 1);
-			cursor.close();
-
-			cursor = getContentResolver().query(
-					android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-					null, MediaStore.Images.Media._ID + " = ? ", new String[]{document_id}, null);
-			cursor.moveToFirst();
-			String path = cursor.getString(cursor.getColumnIndex(MediaStore.Images.Media.DATA));
-			cursor.close();
-
-			return path;
-		}
-
-		;
 	};
 
 	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
@@ -126,50 +115,21 @@ public class PicSyncScheduler extends Service {
 	};
 
 	private BroadcastReceiver wifiChangeReceiver = new BroadcastReceiver() {
-		int connType;
-		WifiManager wifiManager = null;
-
-		public String getCurrentSsid() {
-			String ssid;
-			if (isconnected && connType == ConnectivityManager.TYPE_WIFI) {
-				final WifiInfo connectionInfo = wifiManager.getConnectionInfo();
-				if (connectionInfo != null) {
-					ssid = connectionInfo.getSSID();
-					return ssid.replaceAll("^\"|\"$", "");
-				}
-			}
-			return null;
-		}
 
 		@Override
 		public void onReceive(Context context, Intent intent) {
 			Log.d("PicSyncScheduler", "wifiChangeReceiver onReceive called");
-			if (cm == null)
-				cm = (ConnectivityManager) myContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-			NetworkInfo networkInfo = cm.getActiveNetworkInfo();
-			if (networkInfo == null) {
-				isconnected = false;
-			} else {
-				isconnected = networkInfo.isConnected();
-				connType = networkInfo.getType();
-				wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
-				if (isconnected && connType == ConnectivityManager.TYPE_WIFI) {
-					SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(myContext);
-					String prefsWifi = settings.getString("pref_homewifissid", "NoWifiWhatsoever");
+			checkWifiState();
+			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
+			PicSyncIntent.setAction("PicSyncSchedulerNotification");
+			PicSyncIntent.putExtra("WifiOn",isConnectedToWifi);
+			myContext.startService(PicSyncIntent);
 
-					if (getCurrentSsid().equals(prefsWifi)) {
-						onHomeWifi = true;
-						Log.d("PicSyncScheduler", "Home WiFi detected");
-					} else {
-						onHomeWifi = false;
-						Log.d("PicSyncScheduler", "Other than home WiFi detected");
-					}
-					evaluateTheNeedOfSync();
-				}
-			}
-			Intent PicSyncIntent=new Intent(myContext,PicSync.class);
+/*
+			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
 			PicSyncIntent.setAction(PicSync.ACTION_GET_NAS_CONNECTION);
 			myContext.startService(PicSyncIntent);
+*/
 /*
 			Intent PicSyncIntent = new Intent(this, PicSync.class);
 			if (actionForPicSync == eactionForPicSync.GO)
@@ -185,9 +145,17 @@ public class PicSyncScheduler extends Service {
 	private void evaluateTheNeedOfSync() {
 		if (onHomeWifi && isCharging && changeInMediaFolders) {
 			Log.d("PicSyncScheduler", "We should start sync");
+			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
+			PicSyncIntent.setAction("PicSyncSchedulerNotification");
+			PicSyncIntent.putExtra("WifiOn",isConnectedToWifi);
+			myContext.startService(PicSyncIntent);
+
+/*
 			Intent PicSyncIntent = new Intent(this, PicSync.class);
+*/
 			PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
 			startService(PicSyncIntent);
+
 			changeInMediaFolders = false;
 		} else
 			Log.d("PicSyncScheduler", "We should NOT start sync. If it is running, stop it.");
@@ -195,6 +163,46 @@ public class PicSyncScheduler extends Service {
 
 
 	public PicSyncScheduler() {
+	}
+
+	public String getCurrentSsid() {
+		String ssid;
+		if (isConnected && connType == ConnectivityManager.TYPE_WIFI) {
+			final WifiInfo connectionInfo = wifiManager.getConnectionInfo();
+			if (connectionInfo != null) {
+				ssid = connectionInfo.getSSID();
+				return ssid.replaceAll("^\"|\"$", "");
+			}
+		}
+		return null;
+	}
+
+	public void checkWifiState() {
+		if (cm == null)
+			cm = (ConnectivityManager) myContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+		NetworkInfo networkInfo = cm.getActiveNetworkInfo();
+		if (networkInfo == null) {
+			isConnected = false;
+		} else {
+			isConnected = networkInfo.isConnected();
+			connType = networkInfo.getType();
+			wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+			if (isConnected && connType == ConnectivityManager.TYPE_WIFI) {
+				SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(myContext);
+				String prefsWifi = settings.getString("pref_homewifissid", "NoWifiWhatsoever");
+				isConnectedToWifi = true;
+				if (getCurrentSsid().equals(prefsWifi)) {
+					onHomeWifi = true;
+					Log.d("PicSyncScheduler", "Home WiFi detected");
+				} else {
+					onHomeWifi = false;
+					Log.d("PicSyncScheduler", "Other than home WiFi detected");
+				}
+				evaluateTheNeedOfSync();
+			} else
+				isConnectedToWifi = false;
+		}
+
 	}
 
 	@Override
@@ -208,6 +216,7 @@ public class PicSyncScheduler extends Service {
 				registerReceiver(wifiChangeReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
 				wifiChangeReceiverRegistered = true;
 				Log.d("PicSyncScheduler", "wifiChangeReceiver registered");
+				wifiChangeReceiver.onReceive(myContext,new Intent());
 			}
 			handleChargingConditions();
 		}
@@ -220,18 +229,21 @@ public class PicSyncScheduler extends Service {
 		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
 		if (!isChangeInMediaFoldersRegistered) {
 			this.getContentResolver().
-					registerContentObserver(
-							MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-							true,
-							newMediaObserver);
+											 registerContentObserver(
+													 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+													 true,
+													 newMediaObserver);
 			this.getContentResolver().
-					registerContentObserver(
-							MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-							true,
-							newMediaObserver);
+											 registerContentObserver(
+													 MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+													 true,
+													 newMediaObserver);
 			isChangeInMediaFoldersRegistered = true;
 		}
 		handleSyncCondititions();
+		//Force initial rescan
+		changeInMediaFolders = true;
+		evaluateTheNeedOfSync();
 	}
 
 	private boolean isChargingConditionRequired() {

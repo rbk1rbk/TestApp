@@ -7,7 +7,9 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.opengl.Visibility;
 import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
@@ -36,6 +38,7 @@ public class MainScreen extends AppCompatActivity {
 
 	private static boolean alreadyRunning = false;
 	private static boolean MainScreenReceiverRegistered=false;
+	private static int MainScreenReceiverRegisteredCount=0;
     static Button button;
     private final int READ_EXTERNAL_STORAGE_PERMISSION_CODE=101;
 
@@ -62,8 +65,14 @@ public class MainScreen extends AppCompatActivity {
                 if (Message.equals("msgCopyInProgress")){
 					localCopyFrom = bundle.getString("srcFile");
 					localCopyTo = bundle.getString("tgtFile");
-					((TextView) findViewById(R.id.twCopyFrom)).setText(localCopyFrom);
-					((TextView) findViewById(R.id.twCopyTo)).setText(localCopyTo);
+					if (localCopyFrom.equals("none")){
+						findViewById(R.id.copyProgressBar).setVisibility(View.INVISIBLE);
+					}
+					else {
+						findViewById(R.id.copyProgressBar).setVisibility(View.VISIBLE);
+						((TextView) findViewById(R.id.twCopyFrom)).setText(localCopyFrom);
+						((TextView) findViewById(R.id.twCopyTo)).setText(localCopyTo);
+					}
 				}
 				if (Message.equals("msgImagesCounts")) {
 					localTotalImages = ((Integer) bundle.getInt("TotalImages")).toString();
@@ -171,9 +180,15 @@ public class MainScreen extends AppCompatActivity {
 		((TextView) findViewById(R.id.twScannedImages)).setText(localScannedImages);
 		((TextView) findViewById(R.id.twUnsyncedImages)).setText(localUnsyncedImages);
 		((TextView) findViewById(R.id.twNASConnectivity)).setText(localNASConnectivity);
-		((TextView) findViewById(R.id.twCopyFrom)).setText(localCopyFrom);
-		((TextView) findViewById(R.id.twCopyTo)).setText(localCopyTo);
 		((TextView) findViewById(R.id.twLastSyncedImage)).setText(dateFormat.format(new Date(localLastCopiedImageTimestamp)));
+		if (localCopyFrom.equals("none")){
+			findViewById(R.id.copyProgressBar).setVisibility(View.INVISIBLE);
+		}
+		else {
+			findViewById(R.id.copyProgressBar).setVisibility(View.VISIBLE);
+			((TextView) findViewById(R.id.twCopyFrom)).setText(localCopyFrom);
+			((TextView) findViewById(R.id.twCopyTo)).setText(localCopyTo);
+		}
 
 		Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
 		setSupportActionBar(toolbar);
@@ -223,29 +238,63 @@ public class MainScreen extends AppCompatActivity {
 		localCopyTo = (String) ((TextView) findViewById(R.id.twCopyTo)).getText();
 
         alreadyRunning = true;
+/*
         Intent intent = new Intent(this, WifiWatchdogService.class);
         startService(intent);
+*/
 
+		localCopyFrom="none";
         DrawMainScreen();
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
-        } else {
+        }
+/*
+		else {
             Intent PicSyncIntent = new Intent(this, PicSync.class);
             PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
             startService(PicSyncIntent);
         }
+*/
 
 
         Log.i("MainScreen", "onCreate finished");
     }
+	protected void onStop() {
+		Log.i("MainScreen", "onStop called");
+		super.onStop();
+	}
+	protected void onStart() {
+		Log.i("MainScreen", "onStart called");
+		super.onStart();
+	}
 
-    protected void onResume() {
+	@Override
+	protected void onRestart() {
+		Log.i("MainScreen", "onRestart called");
+		super.onRestart();
+	}
+
+	@Override
+	public void onSaveInstanceState(Bundle outState, PersistableBundle outPersistentState) {
+		Log.i("MainScreen", "onSaveInstanceState called");
+		super.onSaveInstanceState(outState, outPersistentState);
+	}
+
+	@Override
+	protected void onRestoreInstanceState(Bundle savedInstanceState) {
+		Log.i("MainScreen", "onRestoreInstanceState called");
+		super.onRestoreInstanceState(savedInstanceState);
+	}
+	protected void onResume() {
         Log.i("MainScreen","onResume called");
         super.onResume();
         DrawMainScreen();
-        registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
-		MainScreenReceiverRegistered = true;
+		if (MainScreenReceiverRegisteredCount==0) {
+			registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
+			Log.i("MainScreen", "Registering a receiver");
+			MainScreenReceiverRegisteredCount++;
+		}
         Intent PicSyncIntent = new Intent(this,PicSync.class);
         PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
         this.startService(PicSyncIntent);
@@ -256,19 +305,21 @@ public class MainScreen extends AppCompatActivity {
     protected void onPause() {
         Log.i("MainScreen","onPause called");
         super.onPause();
+/*
 		if (MainScreenReceiverRegistered) {
 			unregisterReceiver(MainScreenReceiver);
 			MainScreenReceiverRegistered = false;
 		}
+*/
 	}
 
 	@Override
 	protected void onDestroy() {
 		Log.i("MainScreen","onDestroy called");
 		super.onDestroy();
-		if (MainScreenReceiverRegistered) {
+		while (MainScreenReceiverRegisteredCount>0) {
 			unregisterReceiver(MainScreenReceiver);
-			MainScreenReceiverRegistered = false;
+			MainScreenReceiverRegisteredCount--;
 		}
 	}
 
