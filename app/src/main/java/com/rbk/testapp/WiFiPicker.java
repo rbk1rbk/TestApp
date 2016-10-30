@@ -59,6 +59,9 @@ public class WiFiPicker extends ListActivity {
 		super.onStart();
 
 		Intent wifiWatchdogServiceIntent = new Intent(this, WifiWatchdogService.class);
+/*
+		startService(wifiWatchdogServiceIntent);
+*/
 		bindService(wifiWatchdogServiceIntent, wifiWatchdogServiceConnection, Context.BIND_AUTO_CREATE);
 	}
 

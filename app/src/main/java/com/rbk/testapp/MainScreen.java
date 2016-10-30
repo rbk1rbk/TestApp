@@ -1,16 +1,18 @@
 package com.rbk.testapp;
 
 import android.Manifest;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.opengl.Visibility;
 import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.support.v4.app.ActivityCompat;
+import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
@@ -34,6 +36,7 @@ public class MainScreen extends AppCompatActivity {
     static TextView twPicSyncState;
 	private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
 	private final Context MyContext = this;
+	private static final int mId=1;
 
 
 	private static boolean alreadyRunning = false;
@@ -85,10 +88,14 @@ public class MainScreen extends AppCompatActivity {
 				if (Message.equals("msgState")) {
 					localPicSyncState = bundle.getString(PicSync.STATE);
 					((TextView) findViewById(R.id.twPicSyncState)).setText(localPicSyncState);
+					doNotify();
 				}
 				if (Message.equals("msgLastCopiedImageTimestamp")) {
 					localLastCopiedImageTimestamp = bundle.getLong("lastCopiedImageTimestamp");
-					((TextView) findViewById(R.id.twLastSyncedImage)).setText(dateFormat.format(new Date(localLastCopiedImageTimestamp)));
+					if (localLastCopiedImageTimestamp == 0)
+						((TextView) findViewById(R.id.twLastSyncedImage)).setText("Not synced yet");
+					else
+						((TextView) findViewById(R.id.twLastSyncedImage)).setText(dateFormat.format(new Date(localLastCopiedImageTimestamp)));
 				}
 			}
         }
@@ -101,56 +108,6 @@ public class MainScreen extends AppCompatActivity {
         return true;
     }
 
-	private void showDialogSetLastRun() {
-		AlertDialog.Builder builder = new AlertDialog.Builder(this);
-		final LayoutInflater inflater = this.getLayoutInflater();
-		final View dialogView1 = View.inflate(MyContext, R.layout.dialog_date_time_picker, null);
-		builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
-			public void onClick(DialogInterface _dialog, int id) {
-				DatePicker datePicker = (DatePicker) dialogView1.findViewById(R.id.datePicker);
-				TimePicker timePicker = (TimePicker) dialogView1.findViewById(R.id.timePicker);
-
-				int y = datePicker.getYear();
-				int m = datePicker.getMonth();
-				int d = datePicker.getDayOfMonth();
-				Calendar calendar = new GregorianCalendar(
-						datePicker.getYear(),
-						datePicker.getMonth(),
-						datePicker.getDayOfMonth(),
-						timePicker.getCurrentHour(),
-						timePicker.getCurrentMinute());
-
-				Long resultTime;
-				resultTime = calendar.getTimeInMillis();
-				Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
-				PicSyncIntent.setAction(PicSync.ACTION_SET_LAST_IMAGE_TIMESTAMP);
-				PicSyncIntent.putExtra("lastCopiedImageTimestamp", resultTime);
-				MyContext.startService(PicSyncIntent);
-
-				_dialog.dismiss();
-			}
-		});
-
-		builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-			public void onClick(DialogInterface dialog, int id) {
-				dialog.dismiss();
-			}
-		});
-		builder.setView(dialogView1);
-		AlertDialog dialog = builder.create();
-		DatePicker datePicker = (DatePicker) dialogView1.findViewById(R.id.datePicker);
-		TimePicker timePicker = (TimePicker) dialogView1.findViewById(R.id.timePicker);
-		Date _date = new Date(localLastCopiedImageTimestamp);
-		int y = _date.getYear() + 1900;
-		int m = _date.getMonth();
-		int d = _date.getDate();
-		datePicker.updateDate(y, m, d);
-		timePicker.setIs24HourView(true);
-		timePicker.setCurrentHour(_date.getHours());
-		timePicker.setCurrentMinute(_date.getMinutes());
-		dialog.setTitle("Date & Time");
-		dialog.show();
-	}
    @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         // Handle action bar item clicks here. The action bar will
@@ -172,53 +129,6 @@ public class MainScreen extends AppCompatActivity {
 	   return super.onOptionsItemSelected(item);
    }
 
-    protected void DrawMainScreen(){
-        button = (Button) findViewById(R.id.btnSaveSMB);
-
-		((TextView) findViewById(R.id.twPicSyncState)).setText(localPicSyncState);
-		((TextView) findViewById(R.id.twTotalImages)).setText(localTotalImages);
-		((TextView) findViewById(R.id.twScannedImages)).setText(localScannedImages);
-		((TextView) findViewById(R.id.twUnsyncedImages)).setText(localUnsyncedImages);
-		((TextView) findViewById(R.id.twNASConnectivity)).setText(localNASConnectivity);
-		((TextView) findViewById(R.id.twLastSyncedImage)).setText(dateFormat.format(new Date(localLastCopiedImageTimestamp)));
-		if (localCopyFrom.equals("none")){
-			findViewById(R.id.copyProgressBar).setVisibility(View.INVISIBLE);
-		}
-		else {
-			findViewById(R.id.copyProgressBar).setVisibility(View.VISIBLE);
-			((TextView) findViewById(R.id.twCopyFrom)).setText(localCopyFrom);
-			((TextView) findViewById(R.id.twCopyTo)).setText(localCopyTo);
-		}
-
-		Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-		setSupportActionBar(toolbar);
-		Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
-		PicSyncIntent.setAction(PicSync.ACTION_GET_NAS_CONNECTION);
-		this.startService(PicSyncIntent);
-
-    };
-
-	public void btnStopSyncListener(View v) {
-		Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
-		PicSyncIntent.setAction(PicSync.ACTION_STOP_SYNC);
-		this.startService(PicSyncIntent);
-
-	}
-
-	public void btnSaveOnClickListener(View v) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
-        } else
-            handlebtnSaveonClick();
-    }
-
-    private void handlebtnSaveonClick(){
-        Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
-        PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
-        PicSyncIntent.putExtra(PicSync.EXTRA_PARAM1,PicSync.ACTION_START_SYNC_RESTART);
-        this.startService(PicSyncIntent);
-    };
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -238,27 +148,14 @@ public class MainScreen extends AppCompatActivity {
 		localCopyTo = (String) ((TextView) findViewById(R.id.twCopyTo)).getText();
 
         alreadyRunning = true;
-/*
-        Intent intent = new Intent(this, WifiWatchdogService.class);
-        startService(intent);
-*/
-
 		localCopyFrom="none";
         DrawMainScreen();
-
+		doNotify();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
         }
-/*
-		else {
-            Intent PicSyncIntent = new Intent(this, PicSync.class);
-            PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
-            startService(PicSyncIntent);
-        }
-*/
 
-
-        Log.i("MainScreen", "onCreate finished");
+		Log.i("MainScreen", "onCreate finished");
     }
 	protected void onStop() {
 		Log.i("MainScreen", "onStop called");
@@ -344,4 +241,121 @@ public class MainScreen extends AppCompatActivity {
             // permissions this app might request
         }
     }
+	private void showDialogSetLastRun() {
+		AlertDialog.Builder builder = new AlertDialog.Builder(this);
+		final LayoutInflater inflater = this.getLayoutInflater();
+		final View dialogView1 = View.inflate(MyContext, R.layout.dialog_date_time_picker, null);
+		builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface _dialog, int id) {
+				DatePicker datePicker = (DatePicker) dialogView1.findViewById(R.id.datePicker);
+				TimePicker timePicker = (TimePicker) dialogView1.findViewById(R.id.timePicker);
+
+				int y = datePicker.getYear();
+				int m = datePicker.getMonth();
+				int d = datePicker.getDayOfMonth();
+				Calendar calendar = new GregorianCalendar(
+						datePicker.getYear(),
+						datePicker.getMonth(),
+						datePicker.getDayOfMonth(),
+						timePicker.getCurrentHour(),
+						timePicker.getCurrentMinute());
+
+				Long resultTime;
+				resultTime = calendar.getTimeInMillis();
+				Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
+				PicSyncIntent.setAction(PicSync.ACTION_SET_LAST_IMAGE_TIMESTAMP);
+				PicSyncIntent.putExtra("lastCopiedImageTimestamp", resultTime);
+				MyContext.startService(PicSyncIntent);
+
+				_dialog.dismiss();
+			}
+		});
+
+		builder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+			public void onClick(DialogInterface dialog, int id) {
+				dialog.dismiss();
+			}
+		});
+		builder.setView(dialogView1);
+		AlertDialog dialog = builder.create();
+		DatePicker datePicker = (DatePicker) dialogView1.findViewById(R.id.datePicker);
+		TimePicker timePicker = (TimePicker) dialogView1.findViewById(R.id.timePicker);
+		Date _date = new Date(localLastCopiedImageTimestamp);
+		int y = _date.getYear() + 1900;
+		int m = _date.getMonth();
+		int d = _date.getDate();
+		datePicker.updateDate(y, m, d);
+		timePicker.setIs24HourView(true);
+		timePicker.setCurrentHour(_date.getHours());
+		timePicker.setCurrentMinute(_date.getMinutes());
+		dialog.setTitle("Date & Time");
+		dialog.show();
+	}
+	protected void DrawMainScreen(){
+		button = (Button) findViewById(R.id.btnSaveSMB);
+
+		((TextView) findViewById(R.id.twPicSyncState)).setText(localPicSyncState);
+		((TextView) findViewById(R.id.twTotalImages)).setText(localTotalImages);
+		((TextView) findViewById(R.id.twScannedImages)).setText(localScannedImages);
+		((TextView) findViewById(R.id.twUnsyncedImages)).setText(localUnsyncedImages);
+		((TextView) findViewById(R.id.twNASConnectivity)).setText(localNASConnectivity);
+		((TextView) findViewById(R.id.twLastSyncedImage)).setText(dateFormat.format(new Date(localLastCopiedImageTimestamp)));
+		if (localCopyFrom.equals("none")){
+			findViewById(R.id.copyProgressBar).setVisibility(View.INVISIBLE);
+		}
+		else {
+			findViewById(R.id.copyProgressBar).setVisibility(View.VISIBLE);
+			((TextView) findViewById(R.id.twCopyFrom)).setText(localCopyFrom);
+			((TextView) findViewById(R.id.twCopyTo)).setText(localCopyTo);
+		}
+
+		Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+		setSupportActionBar(toolbar);
+		Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
+		PicSyncIntent.setAction(PicSync.ACTION_GET_NAS_CONNECTION);
+		this.startService(PicSyncIntent);
+
+	};
+
+	public void btnStopSyncListener(View v) {
+		Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
+		PicSyncIntent.setAction(PicSync.ACTION_STOP_SYNC);
+		this.startService(PicSyncIntent);
+
+	}
+
+	public void btnSaveOnClickListener(View v) {
+		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
+			ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
+		} else
+			handlebtnSaveonClick();
+	}
+
+	private void handlebtnSaveonClick(){
+		Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
+		PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
+		PicSyncIntent.putExtra(PicSync.ACTION_START_SYNC_FLAG,PicSync.ACTION_START_SYNC_RESTART);
+		this.startService(PicSyncIntent);
+	}
+	private void doNotify(){
+		NotificationCompat.Builder mBuilder =
+				new NotificationCompat.Builder(this)
+						.setSmallIcon(R.drawable.ic_notifications_black_24dp)
+						.setContentTitle("PicSync")
+						.setContentText(localPicSyncState);
+		Intent notifyIntent = new Intent(this, MainScreen.class);
+		PendingIntent notifyPendingIntent =
+				PendingIntent.getActivity(
+						this,
+						0,
+						notifyIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT
+				);
+
+		mBuilder.setContentIntent(notifyPendingIntent);
+		NotificationManager mNotificationManager =
+				(NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+		mNotificationManager.notify(mId, mBuilder.build());
+
+	}
 }

@@ -7,12 +7,12 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.database.ContentObserver;
-import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -20,9 +20,6 @@ import android.preference.PreferenceManager;
 import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.util.Log;
-
-import java.util.HashSet;
-import java.util.Set;
 
 public class PicSyncScheduler extends Service {
 	static private boolean onUnmeteredNetwork = false;
@@ -35,6 +32,7 @@ public class PicSyncScheduler extends Service {
 	static private boolean changeInMediaFolders = false;
 	static private boolean isChangeInMediaFoldersRegistered = false;
 	static private int nextWakeUpTime = 0;
+	static private boolean askedToRun=false;
 	int callBack = 0;
 
 	int connType;
@@ -43,6 +41,8 @@ public class PicSyncScheduler extends Service {
 	private final Context myContext = this;
 
 	private static SharedPreferences settings;
+	private static String prefsWifi;
+	private static String prefWhenToSync;
 
 	/*
 	* This class provides a Watchdog type of service, that calls back
@@ -69,12 +69,8 @@ public class PicSyncScheduler extends Service {
 		@Override
 		public void onChange(boolean selfChange, Uri uri) {
 			changeInMediaFolders = true;
-/*
-			String filePath;
-			filePath = getImagePath(uri);
-*/
 			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
-			PicSyncIntent.setAction(PicSync.ACTION_SUGGEST_MEDIAURI_SCAN);
+			PicSyncIntent.setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN);
 			PicSyncIntent.putExtra("uri",uri.toString());
 			myContext.startService(PicSyncIntent);
 			evaluateTheNeedOfSync();
@@ -84,6 +80,7 @@ public class PicSyncScheduler extends Service {
 	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
 			new SharedPreferences.OnSharedPreferenceChangeListener() {
 				public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
+					getMySettings();
 					if (TextUtils.equals(key, "pref_switch_charging_condition")) {
 						handleChargingConditions();
 					}
@@ -92,7 +89,9 @@ public class PicSyncScheduler extends Service {
 					}
 					if (TextUtils.equals(key, "pref_when2sync")) {
 						handleSyncCondititions();
+						handleChargingConditions();
 					}
+					evaluateTheNeedOfSync();
 				}
 			};
 
@@ -120,47 +119,49 @@ public class PicSyncScheduler extends Service {
 		public void onReceive(Context context, Intent intent) {
 			Log.d("PicSyncScheduler", "wifiChangeReceiver onReceive called");
 			checkWifiState();
-			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
-			PicSyncIntent.setAction("PicSyncSchedulerNotification");
-			PicSyncIntent.putExtra("WifiOn",isConnectedToWifi);
-			myContext.startService(PicSyncIntent);
-
-/*
-			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
-			PicSyncIntent.setAction(PicSync.ACTION_GET_NAS_CONNECTION);
-			myContext.startService(PicSyncIntent);
-*/
-/*
-			Intent PicSyncIntent = new Intent(this, PicSync.class);
-			if (actionForPicSync == eactionForPicSync.GO)
-				PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
-			else
-				PicSyncIntent.setAction(PicSync.ACTION_STOP_SYNC);
-			startService(PicSyncIntent);
-
-*/
-		}
+			broadcastWifiState();
+			evaluateTheNeedOfSync();
+}
 	};
 
-	private void evaluateTheNeedOfSync() {
-		if (onHomeWifi && isCharging && changeInMediaFolders) {
-			Log.d("PicSyncScheduler", "We should start sync");
-			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
-			PicSyncIntent.setAction("PicSyncSchedulerNotification");
-			PicSyncIntent.putExtra("WifiOn",isConnectedToWifi);
-			myContext.startService(PicSyncIntent);
-
-/*
-			Intent PicSyncIntent = new Intent(this, PicSync.class);
-*/
-			PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
-			startService(PicSyncIntent);
-
-			changeInMediaFolders = false;
-		} else
-			Log.d("PicSyncScheduler", "We should NOT start sync. If it is running, stop it.");
+	private void broadcastWifiState(){
+		Intent PicSyncIntent = new Intent(myContext, PicSync.class);
+		PicSyncIntent.setAction("PicSyncSchedulerNotification");
+		PicSyncIntent.putExtra("WifiOn",isConnectedToWifi);
+		myContext.startService(PicSyncIntent);
 	}
+	private void getMySettings(){
+		if (settings == null)
+			settings = PreferenceManager.getDefaultSharedPreferences(myContext);
+		prefsWifi = settings.getString("pref_homewifissid", "NoWifiWhatsoever");
+		prefWhenToSync = settings.getString("pref_when2sync", "ManualOnly");
 
+	}
+	private void broadcastInitialMediaScan(){
+		startService(new Intent(this, PicSync.class).setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN));
+	}
+	private void askToRun(){
+		Log.d("PicSyncScheduler", "We should start sync");
+		broadcastWifiState();
+		startService(new Intent(this, PicSync.class).setAction(PicSync.ACTION_START_SYNC));
+		askedToRun = true;
+	}
+	private void evaluateTheNeedOfSync() {
+		boolean preferencesFullfilled = (onHomeWifi && isCharging && !TextUtils.equals(prefWhenToSync, "ManualOnly"));
+		if (changeInMediaFolders && preferencesFullfilled) {
+			askToRun();
+			changeInMediaFolders = false;
+		}
+		if (!askedToRun && preferencesFullfilled)
+			askToRun();
+		if (askedToRun && !preferencesFullfilled){
+			Log.d("PicSyncScheduler", "We should NOT start sync. If it is running, stop it.");
+			startService(new Intent(myContext, PicSync.class)
+					.setAction(PicSync.ACTION_STOP_SYNC)
+			);
+			askedToRun=false;
+		}
+	}
 
 	public PicSyncScheduler() {
 	}
@@ -188,8 +189,6 @@ public class PicSyncScheduler extends Service {
 			connType = networkInfo.getType();
 			wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
 			if (isConnected && connType == ConnectivityManager.TYPE_WIFI) {
-				SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(myContext);
-				String prefsWifi = settings.getString("pref_homewifissid", "NoWifiWhatsoever");
 				isConnectedToWifi = true;
 				if (getCurrentSsid().equals(prefsWifi)) {
 					onHomeWifi = true;
@@ -202,7 +201,6 @@ public class PicSyncScheduler extends Service {
 			} else
 				isConnectedToWifi = false;
 		}
-
 	}
 
 	@Override
@@ -211,7 +209,7 @@ public class PicSyncScheduler extends Service {
 	}
 
 	private void handleSyncCondititions() {
-		if (!TextUtils.equals(settings.getString("pref_when2sync", ""), "Manual only")) {
+		if (!TextUtils.equals(prefWhenToSync, "ManualOnly")) {
 			if (!wifiChangeReceiverRegistered) {
 				registerReceiver(wifiChangeReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
 				wifiChangeReceiverRegistered = true;
@@ -225,7 +223,8 @@ public class PicSyncScheduler extends Service {
 	@Override
 	public void onCreate() {
 		super.onCreate();
-		settings = PreferenceManager.getDefaultSharedPreferences(this);
+		getMySettings();
+
 		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
 		if (!isChangeInMediaFoldersRegistered) {
 			this.getContentResolver().
@@ -244,13 +243,9 @@ public class PicSyncScheduler extends Service {
 		//Force initial rescan
 		changeInMediaFolders = true;
 		evaluateTheNeedOfSync();
+		if (!askedToRun)
+			broadcastInitialMediaScan();
 	}
-
-	private boolean isChargingConditionRequired() {
-		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(myContext);
-		return settings.getBoolean("pref_switch_charging_condition", false);
-	}
-
 	private void registerChargerEventReceiver() {
 		if (!chargerEventReceiverRegistered) {
 			registerReceiver(chargerPluggedReceiver, new IntentFilter("android.intent.action.ACTION_POWER_CONNECTED"));
@@ -267,12 +262,20 @@ public class PicSyncScheduler extends Service {
 		}
 
 	}
-
+	private boolean getChargingState(){
+		IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+		Intent batteryStatus = myContext.registerReceiver(null, ifilter);
+		int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+		return (status == BatteryManager.BATTERY_STATUS_CHARGING);
+	}
 	private void handleChargingConditions() {
-		isChargingCondition = isChargingConditionRequired();
-		if (isChargingCondition && !chargerEventReceiverRegistered) {
-			Log.d("PicSyncScheduler", "Charging events listeners registered");
-			registerChargerEventReceiver();
+		isChargingCondition = (prefWhenToSync == "AtHomeAndCharging");
+		if (isChargingCondition) {
+			if (!chargerEventReceiverRegistered) {
+				Log.d("PicSyncScheduler", "Charging events listeners registered");
+				registerChargerEventReceiver();
+				isCharging=getChargingState();
+			}
 		} else {
 			unregisterChargerEventReceiver();
 			isCharging = true;

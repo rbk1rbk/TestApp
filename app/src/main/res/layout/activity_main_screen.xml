@@ -46,7 +46,9 @@
     </android.support.design.widget.AppBarLayout>
 </TableRow>
     <TableRow>
-    <include layout="@layout/activity_content"/>
+    <include layout="@layout/activity_content"
+             android:layout_height="match_parent"
+             android:layout_width="100dp"/>
     </TableRow>
 </TableLayout>
 <!--

@@ -305,6 +305,9 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
             super.onCreate(savedInstanceState);
             addPreferencesFromResource(R.xml.pref_upload);
             setHasOptionsMenu(true);
+            bindPreferenceSummaryToValue(findPreference("prefTGTFolderStructure"));
+            bindPreferenceSummaryToValue(findPreference("prefsSubfolderNameFormat"));
+
         }
 
         @Override

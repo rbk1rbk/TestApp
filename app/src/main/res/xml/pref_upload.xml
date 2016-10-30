@@ -29,14 +29,26 @@
     -->
     <PreferenceCategory
         android:title="Picture Upload">
-        <EditTextPreference
+        <SwitchPreference
             android:title="Per album folder?"/>
+        <ListPreference
+            android:title="NAS folder structure"
+            android:key="prefTGTFolderStructure"
+            android:entries="@array/prefTGTFolderStructNames"
+            android:entryValues="@array/prefTGTFolderStructValues">
+
+        </ListPreference>
         <EditTextPreference
-            android:title="Target subfolder name format"/>
+            android:defaultValue="yyyy/yyyy-MM-dd"
+            android:inputType="textNoSuggestions"
+            android:key="prefsSubfolderNameFormat"
+            android:maxLines="1"
+            android:title="Target folder structure"/>
         <EditTextPreference
             android:title="Conflicting names resolution"/>
         <EditTextPreference
-            android:title="Conflicting names resolution"/>
+            android:title="Conflicting names resolution"
+            />
     </PreferenceCategory>
     <PreferenceCategory
         android:title="Source retention">
