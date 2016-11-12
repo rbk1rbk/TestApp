@@ -20,27 +20,28 @@
         <activity android:name=".MainScreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
-
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
 
+<!--
         <service
             android:name=".WifiWatchdogService"
             android:enabled="true"
             android:exported="false"/>
+        <receiver
+            android:name=".WifiChangeReceiver"
+            android:enabled="true"
+            android:exported="false"/>
+-->
 
-                <receiver
-                    android:name=".WifiChangeReceiver"
-                    android:enabled="false"
-                    android:exported="false"/>
         <service
             android:name=".PicSync"
             android:exported="false">
         </service>
         <!--
-                        android:label="PicSync"
-                    android:process=":PicSync"
+            android:label="PicSync"
+            android:process=":PicSync"
         -->
         <activity
             android:name=".SettingsActivity"
@@ -55,7 +56,11 @@
             android:name=".CIFSbrowser"
             android:label="CIFS Browser"
             android:parentActivityName=".SettingsActivity"
-            android:theme="@style/AppTheme.WithActionBar">
+            android:theme="@android:style/Theme.Holo.Light.Dialog"
+            >
+<!--
+            android:theme="@style/AppTheme.WithActionBar"
+-->
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.rbk.testapp.SettingsActivity"/>

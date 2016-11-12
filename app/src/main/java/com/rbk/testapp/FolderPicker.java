@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
@@ -41,6 +42,7 @@ public class FolderPicker extends ListActivity {
 	private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
+			Log.d("FolderPicker onReceive",intent.getAction());
 			Bundle bundle = intent.getExtras();
 			List values = new ArrayList();
 			if (bundle != null) {

@@ -2,98 +2,116 @@
 <TableLayout xmlns:android="http://schemas.android.com/apk/res/android"
              android:layout_width="fill_parent"
              android:layout_height="fill_parent"
-             android:orientation="vertical"
-             android:nestedScrollingEnabled="false"
-             android:rowOrderPreserved="true"
              android:minHeight="50dp"
-             android:stretchColumns="0">
+             android:negativeButtonText="Cancel"
+             android:orientation="vertical"
+             android:positiveButtonText="Select"
+             android:rowOrderPreserved="true"
+             android:stretchColumns="0"
+             android:theme="@android:style/Theme.Holo.Light.Dialog"
+             android:title="Blabla">
 
     <!--
         android:nestedScrollingEnabled="false"
     -->
-    <TableRow
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
-
-        <android.support.design.widget.AppBarLayout
+    <!--
+        <TableRow
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:theme="@style/AppTheme.AppBarOverlay">
+            android:layout_height="match_parent">
 
-            <android.support.v7.widget.Toolbar
-                android:id="@+id/toolbar"
+            <android.support.design.widget.AppBarLayout
                 android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
-                style="@style/AppTheme.AppBarOverlay"/>
-        </android.support.design.widget.AppBarLayout>
-    </TableRow>
+                android:layout_height="match_parent"
+                android:theme="@style/AppTheme.AppBarOverlay">
 
+                <android.support.v7.widget.Toolbar
+                    android:id="@+id/toolbar"
+                    android:layout_width="match_parent"
+                    android:layout_height="?attr/actionBarSize"
+                    style="@style/AppTheme.AppBarOverlay"/>
+            </android.support.design.widget.AppBarLayout>
+        </TableRow>
+    -->
     <TableRow>
 
         <ProgressBar
+            android:id="@+id/progressBar"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:id="@+id/progressBar"
             android:indeterminate="true"
             android:indeterminateBehavior="cycle"
             android:visibility="invisible"/>
+
     </TableRow>
+
     <TableRow
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:minHeight="50dp"
-        android:nestedScrollingEnabled="false"
-        android:longClickable="false"
-        android:visibility="visible"
-        android:transitionGroup="true"
+        android:layout_height="0dp"
         android:measureWithLargestChild="true"
-        android:minWidth="50dp">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="100">
-
-            <Button
-                android:id="@+id/buttonCancel"
-                android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:layout_gravity="bottom"
-                android:gravity="center_vertical|center_horizontal"
-                android:text="Cancel"
-                android:layout_weight="0"/>
-
-            <Button
-                android:id="@+id/buttonChoose"
-                android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:layout_gravity="bottom"
-                android:gravity="center_vertical|center_horizontal"
-                android:text="Choose"
-                android:layout_weight="0"
-                android:onClick="onBtnSelectClick"/>
-        </LinearLayout>
-    </TableRow>
-
-    <TableRow
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:measureWithLargestChild="true">
+        android:layout_weight="1">
 
         <ListView
-            android:layout_span="3"
             android:id="@android:id/list"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:layout_rowWeight="0"
+            android:layout_span="3"
             android:choiceMode="singleChoice"
             android:drawSelectorOnTop="true"
             android:scrollingCache="true"
             android:smoothScrollbar="true"
-            android:theme="@style/AppTheme"
             android:stackFromBottom="false"
-            android:layout_rowWeight="0"
-            />
+            android:theme="@style/AppTheme"
+            android:minHeight="100dp"/>
     </TableRow>
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_gravity="center"
+        android:longClickable="false"
+        android:measureWithLargestChild="false"
+        android:nestedScrollingEnabled="false"
+        android:transitionGroup="false"
+        android:visibility="visible"
+        android:layout_weight="0"
+        android:layout_height="wrap_content">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:weightSum="1"
+            android:textAlignment="center"
+            android:padding="0dp">
+
+            <Button
+                android:id="@+id/buttonCancel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.50"
+                android:onClick="onBtnSelectClick"
+                android:text="@android:string/cancel"
+                android:minHeight="1dp"
+                android:minWidth="1dp"/>
+
+            <Button
+                android:id="@+id/buttonChoose"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.5"
+                android:onClick="onBtnSelectClick"
+                android:text="Confirm"
+                android:minHeight="1dp"
+                android:enabled="false"
+                android:minWidth="1dp"
+                android:layout_margin="0dp"/>
+        </LinearLayout>
+    </TableRow>
+
+    <!--    <android.support.design.widget.FloatingActionButton
+        android:id="@+id/fabConfirmSelection"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        />-->
 </TableLayout>

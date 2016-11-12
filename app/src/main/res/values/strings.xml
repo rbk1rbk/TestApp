@@ -2,9 +2,6 @@
     <string name="app_name">TestApp</string>
     <string name="title_activity_settings">Settings</string>
 
-    <!-- Strings related to Settings -->
-
-    <!-- Example General settings -->
     <string name="pref_header_general">General</string>
 
     <string-array name="pref_when2sync_titles">
@@ -18,9 +15,9 @@
         <item>ManualOnly</item>
     </string-array>
 
-    <!-- Example settings for Data & Sync -->
     <string name="pref_header_data_sync">Data &amp; sync</string>
 
+<!--
     <string name="pref_title_sync_frequency">Sync frequency</string>
     <string-array name="pref_sync_frequency_titles">
         <item>15 minutes</item>
@@ -40,20 +37,82 @@
     </string-array>
 
     <string name="pref_title_system_sync_settings">System sync settings</string>
+-->
 
     <!-- Example settings for Notifications -->
     <string name="pref_header_notifications">Notifications</string>
 
+<!--
     <string name="pref_title_new_message_notifications">New message notifications</string>
 
     <string name="pref_title_ringtone">Ringtone</string>
     <string name="pref_ringtone_silent">Silent</string>
 
+-->
+<!--
     <string name="pref_title_vibrate">Vibrate</string>
+-->
     <string name="title_activity_synced_folders_list">SyncedFoldersList</string>
     <string name="pref_cifs_server">prefsSMBSRV</string>
     <string name="pref_cifs_user">prefsSMBUSER</string>
     <string name="pref_cifs_password">prefsSMBPWD</string>
     <string name="pref_cifs_share">prefsSMBSHARE</string>
     <string name="pref_cifs_url">prefsTGTURI</string>
+
+    <string-array name="prefTGTFolderStructNames">
+        <item>Flat structure</item>
+        <item>Date based structure</item>
+    </string-array>
+    <string-array name="prefTGTFolderStructValues">
+        <item>prefTGTFolderStructFlat</item>
+        <item>prefTGTFolderStructDate</item>
+    </string-array>
+
+    <string-array name="prefTGTRenameOptionNames">
+        <item>No Change</item>
+        <item>YearMonthDay.[ext]</item>
+        <item>Year-Month-Day.[ext]</item>
+    </string-array>
+    <string-array name="prefTGTRenameOptionValues">
+        <item>prefTGTRenameOption_NoChange</item>
+        <item>prefTGTRenameOption_YMD</item>
+        <item>prefTGTRenameOption_Y-M-D</item>
+    </string-array>
+
+    <string-array name="prefsSubfolderNameFormatNames">
+        <item>No Change</item>
+        <item>No Subfolders</item>
+        <item>Year-Month-Day</item>
+        <item>Year/Year-Month-Day</item>
+        <item>Year/Month/Year-Month-Day</item>
+        <item>Year/Month/Day</item>
+    </string-array>
+    <string-array name="prefsSubfolderNameFormatValues">
+        <item>NoChange</item>
+        <item>NoSubfolders</item>
+        <item>yyyy-MM-dd</item>
+        <item>yyyy/yyyy-MM-dd</item>
+        <item>yyyy/MM/yyyy-MM-dd</item>
+        <item>yyyy/MM/dd</item>
+    </string-array>
+
+    <string-array name="prefTGTAlreadyExistsTestNames">
+        <item>Names match</item>
+        <item>Names and sizes match</item>
+        <item>Names and sizes and checksums match</item>
+    </string-array>
+    <string-array name="prefTGTAlreadyExistsTestValues">
+        <item>prefTGTAlreadyExistsTest_matchName</item>
+        <item>prefTGTAlreadyExistsTest_matchNameSize</item>
+        <item>prefTGTAlreadyExistsTest_matchNameSizeCksum</item>
+    </string-array>
+
+    <string-array name="prefTGTAlreadyExistsRenameNames">
+        <item>filename.[devicename].[ext]</item>
+        <item>filename.[01].[ext]</item>
+    </string-array>
+    <string-array name="prefTGTAlreadyExistsRenameValues">
+        <item>prefTGTAlreadyExistsRename_devicename</item>
+        <item>prefTGTAlreadyExistsRename_number</item>
+    </string-array>
 </resources>

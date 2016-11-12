@@ -5,13 +5,17 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.net.wifi.WifiConfiguration;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class WiFiPicker extends ListActivity {
@@ -58,11 +62,27 @@ public class WiFiPicker extends ListActivity {
 	protected void onStart() {
 		super.onStart();
 
-		Intent wifiWatchdogServiceIntent = new Intent(this, WifiWatchdogService.class);
 /*
+		Intent wifiWatchdogServiceIntent = new Intent(this, WifiWatchdogService.class);
+		boolean bindOK = bindService(wifiWatchdogServiceIntent, wifiWatchdogServiceConnection, Context.BIND_AUTO_CREATE);
 		startService(wifiWatchdogServiceIntent);
-*/
-		bindService(wifiWatchdogServiceIntent, wifiWatchdogServiceConnection, Context.BIND_AUTO_CREATE);
+		Log.d("Wifi picker bindService", new Boolean(bindOK).toString());*/
+		WifiManager wifiManager;
+		wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+		List<WifiConfiguration> wifiList = wifiManager.getConfiguredNetworks();
+		List<String> wifiSSIDList =new ArrayList<String>();
+		if (wifiList != null) {
+			wifiSSIDList.clear();
+			for (WifiConfiguration wifiItem : wifiList) {
+				wifiSSIDList.add(wifiItem.SSID.replaceAll("^\"|\"$", ""));
+			}
+		}
+		if (wifiSSIDList.size() == 0) {
+			wifiSSIDList.add("No network in range. Is Wifi on?");
+			return;
+		}
+		ArrayAdapter adapter = new ArrayAdapter(WiFiPicker.this, android.R.layout.simple_list_item_1, android.R.id.text1, wifiSSIDList);
+		setListAdapter(adapter);
 	}
 
 	@Override
@@ -82,6 +102,8 @@ public class WiFiPicker extends ListActivity {
 	@Override
 	protected void onDestroy() {
 		super.onDestroy();
+/*
 		unbindService(wifiWatchdogServiceConnection);
+*/
 	}
 }

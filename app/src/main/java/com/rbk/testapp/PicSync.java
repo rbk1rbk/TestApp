@@ -100,6 +100,7 @@ public class PicSync extends IntentService{
 
 	static final int cifsAllowedBrowsables = SmbFile.TYPE_WORKGROUP | SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
 	static final int cifsAllowedBrowsablesForUp = SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
+	static final int cifsAllowedToSelect = SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
 	private List values;
 
 	private static Handler h;
@@ -165,6 +166,9 @@ public class PicSync extends IntentService{
 		MediaFilesDB.openDBRW();
 
 		broadcastLastCopiedImageTimestamp();
+		if (settings.getString("prefsSMBSRV","EMPTY").equals("EMPTY"))
+			broadcastState("Not Configured");
+		broadcastConnectionStatus();
 		startService(intent);
 	}
 
@@ -249,8 +253,12 @@ public class PicSync extends IntentService{
 		String sharename = "";
 		int smbtype = 0;
 		boolean canReadDir = true;
+		boolean exception = false;
 		try {
+/*
 			NASService.openConnection();
+*/
+			NASService.setAuthentication();
 			//Check, whether it is not a smb://server/../ format
 			String pathToCheckWithoutDoubleDots = path.replaceAll("\\.\\.\\/$", "");
 			if (path.endsWith(".." + File.separator) && (new SmbFile(pathToCheckWithoutDoubleDots, auth).getType() & SmbFile.TYPE_SERVER) == SmbFile.TYPE_SERVER)
@@ -296,17 +304,26 @@ public class PicSync extends IntentService{
 			}
 		} catch (MalformedURLException e) {
 			e.printStackTrace();
+			exception = true;
 		} catch (SmbException e) {
+			exception = true;
 			e.printStackTrace();
+			if (e.toString().contains("Logon failure"))
+				makeToast("Check username and password settings");
+			else
+				makeToast("PicSync: connectivity issue: " + e.getMessage());
+
 		}
 		broadcastConnectionStatus();
 		Collections.sort(values);
 		Intent returnCIFSListIntent = new Intent("CIFSList");
 		returnCIFSListIntent.putExtra("cifsList", (String[]) values.toArray(new String[values.size()]));
 		returnCIFSListIntent.putExtra("smbCanonicalPath", path);
-		returnCIFSListIntent.putExtra("smbType", smbtype);
 		returnCIFSListIntent.putExtra("servername", servername);
+		returnCIFSListIntent.putExtra("smbType", smbtype);
 		returnCIFSListIntent.putExtra("sharename", sharename);
+		returnCIFSListIntent.putExtra("exception", exception);
+		returnCIFSListIntent.putExtra("selectable", (smbtype&cifsAllowedToSelect));
 		LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnCIFSListIntent);
 	}
 
@@ -690,7 +707,6 @@ public class PicSync extends IntentService{
 	}
 
 	private Set<String> listMediaFilesToSync() {
-		broadcastState("Scanning media");
 		mediaFilesCountTotal = 0;
 		mediaFilesScanned = 0;
 		mediaFilesCountToSync = 0;
@@ -712,6 +728,10 @@ public class PicSync extends IntentService{
 */
 
 		String tgtPath = settings.getString("prefsSMBURI", null);
+		if (mediaPaths.size() > 0)
+			broadcastState("Scanning media");
+		else
+			return null;
 		for (String mediaPath : mediaPaths) {
 /*
 			String[] mediaFiles = listPictures(mediaPath, "TimeStampCondition");
@@ -806,7 +826,6 @@ public class PicSync extends IntentService{
 	}
 
 	private int scanMediaFilesToSync() {
-		broadcastState("Scanning media");
 		mediaFilesCountTotal = 0;
 		mediaFilesScanned = 0;
 		mediaFilesCountToSync = 0;
@@ -821,6 +840,10 @@ public class PicSync extends IntentService{
 		String tgtPath = settings.getString("prefsSMBURI", null);
 		MediaFilesDB.getDBStatistics();
 		long newRowId;
+		if (mediaPaths.size() > 0)
+			broadcastState("Scanning media");
+		else
+			return 0;
 		for (String mediaPath : mediaPaths) {
 			String[] mediaFiles = listPictures(mediaPath,"TimeStampCondition");
 			for (String srcMediaFileNameFull : mediaFiles) {
@@ -1451,8 +1474,8 @@ public class PicSync extends IntentService{
 
 		NASService(Context ctx) {
 			MyContext = ctx;
-
 /*
+			jcifs.Config.setProperty("jcifs.netbios.wins", "127.0.0.1");
 		if (settings == null)
 			settings = PreferenceManager.getDefaultSharedPreferences(MyContext);
 */
@@ -1476,29 +1499,52 @@ public class PicSync extends IntentService{
 			return isNASConnected;
 		}
 
+		public static void setAuthentication() {
+			if ((authenticated) && (!SharedPreferencesChanged))
+				return;
+			smbuser = settings.getString(MyContext.getString(R.string.pref_cifs_user), "");
+			smbpasswd = settings.getString(MyContext.getString(R.string.pref_cifs_password), "guest");
+			if (((auth == null) || SharedPreferencesChanged)) {
+				if  (!smbuser.isEmpty() && !smbuser.equals("") && !smbpasswd.isEmpty() && !smbpasswd.equals(""))
+					auth = new NtlmPasswordAuthentication(null, smbuser, smbpasswd);
+				else
+					auth=NtlmPasswordAuthentication.ANONYMOUS;
+/*
+				if  ((smbuser.isEmpty()) || smbuser.equals(""))
+					auth = new NtlmPasswordAuthentication(null, null, null);
+				else if  ((smbpasswd.isEmpty()) || smbpasswd.equals(""))
+					auth = new NtlmPasswordAuthentication(null, "guest", null);
+				else
+					auth = new NtlmPasswordAuthentication(null, smbuser, smbpasswd);
+*/
+			}
+			SharedPreferencesChanged = false;
+		}
 		public static void openConnection() throws MalformedURLException {
 			if (!isConnectedToWifi) {
 				makeToast("Wifi is not connected");
 				return;
 			}
-			if ((authenticated) && (!SharedPreferencesChanged))
-				return;
-
-			smbservername = settings.getString(MyContext.getString(R.string.pref_cifs_server), "");
-			smbuser = settings.getString(MyContext.getString(R.string.pref_cifs_user), "");
-			smbpasswd = settings.getString(MyContext.getString(R.string.pref_cifs_password), "guest");
+			smbservername = settings.getString("prefsSMBSRV", "");
 			smbshare = settings.getString(MyContext.getString(R.string.pref_cifs_share), "");
 
 			if (smbshare.equals(""))
 				smbshareurl = "smb://" + smbservername + "/";
 			else
 				smbshareurl = "smb://" + smbservername + "/" + smbshare + "/";
+			setAuthentication();
+/*
+			if ((authenticated) && (!SharedPreferencesChanged))
+				return;
 
+			smbuser = settings.getString(MyContext.getString(R.string.pref_cifs_user), "");
+			smbpasswd = settings.getString(MyContext.getString(R.string.pref_cifs_password), "guest");
 			jcifs.Config.setProperty("jcifs.netbios.wins", smbservername);
 			String exceptionString;
 			if (((auth == null) || SharedPreferencesChanged) && (!smbuser.isEmpty()))
 				auth = new NtlmPasswordAuthentication(null, smbuser, smbpasswd);
 			SharedPreferencesChanged = false;
+*/
 			isNASConnected = true;
 			SmbFile[] domains = null;
 			SmbFile domainsFile = null;
