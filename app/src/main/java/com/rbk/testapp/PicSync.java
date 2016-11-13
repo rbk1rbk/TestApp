@@ -24,9 +24,11 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -45,6 +47,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 
+import jcifs.UniAddress;
 import jcifs.smb.NtlmPasswordAuthentication;
 import jcifs.smb.SmbException;
 import jcifs.smb.SmbFile;
@@ -70,6 +73,7 @@ public class PicSync extends IntentService{
 	private final String timestampFileName = "timestampFile";
 	private static File timestampFile;
 	private static IBinder myBinder;
+	private static boolean prefsMACverified = false;
 
 	static final String ACTION_GET_STATE = "PicSync.GetState";
 	static final String ACTION_START_SYNC = "PicSync.Start";
@@ -82,6 +86,9 @@ public class PicSync extends IntentService{
 	static final String ACTION_GET_NAS_CONNECTION = "PicSync.getNASConnection";
 	static final String ACTION_SUGGEST_MEDIA_SCAN = "PicSync.suggestMediaScan";
 	static final String ACTION_SET_LAST_IMAGE_TIMESTAMP = "PicSync.setLastImageTimestamp";
+	static final String ACTION_UPDATE_WOL = "PicSync.updateWOL";
+
+
 
 
 	static String smblocalhostname = "testovacimobil";
@@ -116,9 +123,7 @@ public class PicSync extends IntentService{
 	static long lastScannedImageTimestamp;
 	private static MediaFilesDBclass MediaFilesDB;
 
-	private enum ePicSyncState {PIC_SYNC_STATE_STOPPED, PIC_SYNC_STATE_RUNNING, PIC_SYNC_STATE_NO_ACCESS, PIC_SYNC_STATE_STOP}
-
-	;
+	private enum ePicSyncState {PIC_SYNC_STATE_STOPPED, PIC_SYNC_STATE_RUNNING, PIC_SYNC_STATE_NO_ACCESS, PIC_SYNC_STATE_STOP};
 	private static volatile ePicSyncState PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
 
 	private final NASService nasService = new NASService(MyContext);
@@ -168,6 +173,8 @@ public class PicSync extends IntentService{
 		broadcastLastCopiedImageTimestamp();
 		if (settings.getString("prefsSMBSRV","EMPTY").equals("EMPTY"))
 			broadcastState("Not Configured");
+		if (!prefsMACverified)
+			prefsMACverified = settings.getBoolean("prefsMACverified",false);
 		broadcastConnectionStatus();
 		startService(intent);
 	}
@@ -236,7 +243,13 @@ public class PicSync extends IntentService{
 				return false;
 			if (filename.startsWith(".") || filename.contains("$"))
 				return false;
-			return true;
+			boolean isDir=false;
+			try {
+				isDir=file.isDirectory();
+			} catch (SmbException e) {
+				e.printStackTrace();
+			}
+			return isDir;
 		}
 	};
 
@@ -388,6 +401,10 @@ public class PicSync extends IntentService{
 			if (ACTION_BROWSE_CIFS.equals(action)) {
 				final String path = intent.getStringExtra("path");
 				BrowseCIFS(path);
+				return;
+			}
+			if (ACTION_UPDATE_WOL.equals(action)) {
+				NASService.storeWoLInfo(intent.getStringExtra("servername"));
 				return;
 			}
 			if (ACTION_GET_STATE.equals(action)) {
@@ -931,8 +948,10 @@ public class PicSync extends IntentService{
 			tgtFile = new SmbFile(tgt, auth);
 			try {
 				boolean fileExists=tgtFile.exists();
+/*TODO
 				if (fileExists)
 					tgtFile = resolveTGTNameConflict(tgtFile);
+*/
 				tgtFile.createNewFile();
 				tgtFile.delete();
 			} catch (SmbException e) {
@@ -946,7 +965,7 @@ public class PicSync extends IntentService{
 			tgtFileStream = new SmbFileOutputStream(tgtFileTMP);
 			int read = 0;
 			long read_total = 0;
-			while ((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) {
+			while (((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) && PicSyncState != ePicSyncState.PIC_SYNC_STATE_RUNNING) {
 				read_total += read;
 				tgtFileStream.write(buffer, 0, read);
 			}
@@ -1150,16 +1169,13 @@ public class PicSync extends IntentService{
 					return;
 				}
 			}
-			if (!isNASConnected && isWoLallowed) {
-				WoL();
+			if (!isNASConnected && isWoLallowed && prefsMACverified) {
+				NASService.WoL();
 				NASService.waitForConnection(10, 2);
 				broadcastConnectionStatus();
 			}
 			if (isNASConnected) {
 				broadcastState(MyState = "PicSync is copying files");
-/*
-				DoSyncFromDB();
-*/
 				DoSyncInSeparateThread.run();
 				broadcastState(MyState = "PicSync is idle");
 			} else
@@ -1262,57 +1278,12 @@ public class PicSync extends IntentService{
 		}
 	}
 
-	public static final int PORT = 9;
-
-	public void WoL() {
-
-		String ipStr = "192.168.0.255";
-		String macStr = "1c:6f:65:90:a8:f9";
-
-		try {
-			byte[] macBytes = getMacBytes(macStr);
-			byte[] bytes = new byte[6 + 16 * macBytes.length];
-			for (int i = 0; i < 6; i++) {
-				bytes[i] = (byte) 0xff;
-			}
-			for (int i = 6; i < bytes.length; i += macBytes.length) {
-				System.arraycopy(macBytes, 0, bytes, i, macBytes.length);
-			}
-
-			InetAddress address = InetAddress.getByName(ipStr);
-			DatagramPacket packet = new DatagramPacket(bytes, bytes.length, address, PORT);
-			DatagramSocket socket = new DatagramSocket();
-			socket.send(packet);
-			socket.close();
-
-			Log.d("WoL", "Wake-on-LAN packet sent.");
-		} catch (Exception e) {
-			Log.d("WoL", "Failed to send Wake-on-LAN packet:" + e);
-		}
-
-	}
-
-	private static byte[] getMacBytes(String macStr) throws IllegalArgumentException {
-		byte[] bytes = new byte[6];
-		String[] hex = macStr.split("(\\:|\\-)");
-		if (hex.length != 6) {
-			throw new IllegalArgumentException("Invalid MAC address.");
-		}
-		try {
-			for (int i = 0; i < 6; i++) {
-				bytes[i] = (byte) Integer.parseInt(hex[i], 16);
-			}
-		} catch (NumberFormatException e) {
-			throw new IllegalArgumentException("Invalid hex digit in MAC address.");
-		}
-		return bytes;
-	}
 
 	/*
 		************************************************************************************************
 	*/
 	private static class MediaFilesDBclass extends SQLiteOpenHelper {
-		public static final int DATABASE_VERSION = 2;
+		public static final int DATABASE_VERSION = 1;
 		public static final String DATABASE_NAME = "PicSync.db";
 		private static boolean dbOpened = false;
 		private static SQLiteDatabase db;
@@ -1490,12 +1461,19 @@ public class PicSync extends IntentService{
 			try {
 				if (!authenticated)
 					openConnection();
-				(new SmbFile("smb://" + smbservername + "/", auth)).list();
+				String[] x = (new SmbFile("smb://" + smbservername + "/", auth)).list();
 			} catch (SmbException | MalformedURLException e) {
 				e.printStackTrace();
 				isNASConnected = false;
 				authenticated = false;
 			}
+
+			if (!prefsMACverified)
+				prefsMACverified = settings.getBoolean("prefsMACverified",false);
+			if (isNASConnected && !prefsMACverified) {
+				storeWoLInfo();
+			}
+
 			return isNASConnected;
 		}
 
@@ -1572,7 +1550,6 @@ public class PicSync extends IntentService{
 
 		public static void waitForConnection(int retries, int timeout) {
 			int iteration = 1;
-			boolean connected = false;
 			while (iteration++ < retries && !checkConnection()) {
 				try {
 					Thread.sleep(1000 * (iteration * timeout));
@@ -1583,35 +1560,12 @@ public class PicSync extends IntentService{
 			}
 		}
 
-		/*
-			public String ping(String url) {
-				String str = "";
-				try {
-					Process process = Runtime.getRuntime().exec("/system/bin/ping -c 8 " + url);
-					BufferedReader reader = new BufferedReader(new InputStreamReader(
-							process.getInputStream()));
-					int i;
-					char[] buffer = new char[4096];
-					StringBuffer output = new StringBuffer();
-					while ((i = reader.read(buffer)) > 0)
-						output.append(buffer, 0, i);
-					reader.close();
-
-					// body.append(output.toString()+"\n");
-					str = output.toString();
-					// Log.d(TAG, str);
-				} catch (IOException e) {
-					// body.append("Error\n");
-					e.printStackTrace();
-				}
-				return str;
-			}
-
-		*/
 		public static void WoL() {
+			final int PORT = 9;
 
-			String ipStr = "192.168.0.255";
-			String macStr = "1c:6f:65:90:a8:f9";
+			String ipStr = null;
+			ipStr = settings.getString("smbserverip","");;
+			String macStr = settings.getString("prefsMAC","");
 
 			try {
 				byte[] macBytes = getMacBytes(macStr);
@@ -1634,7 +1588,47 @@ public class PicSync extends IntentService{
 				Log.d("WoL", "Failed to send Wake-on-LAN packet:" + e);
 			}
 		}
+		private static byte[] getMacBytes(String macStr) throws IllegalArgumentException {
+			byte[] bytes = new byte[6];
+			String[] hex = macStr.split("(\\:|\\-)");
+			if (hex.length != 6) {
+				throw new IllegalArgumentException("Invalid MAC address.");
+			}
+			try {
+				for (int i = 0; i < 6; i++) {
+					bytes[i] = (byte) Integer.parseInt(hex[i], 16);
+				}
+			} catch (NumberFormatException e) {
+				throw new IllegalArgumentException("Invalid hex digit in MAC address.");
+			}
+			return bytes;
+		}
+		private static void storeWoLInfo(){
+			storeWoLInfo(smbservername);
+		};
+		private static void storeWoLInfo(String servername){
+			String smbserverip,smbserverbcast;
+			try {
+				smbserverip = UniAddress.getByName(servername).getHostAddress();
+				final Set<String> arp = new HashSet<String>();
+				BufferedReader br = new BufferedReader(new FileReader(new File("/proc/net/arp")));
+				String smbservermac, line;
+				while ((line = br.readLine()) != null)
+					if (line.startsWith(smbserverip)) {
+						smbservermac = line.split("[[:blank:]]+")[3];
+						SharedPreferences.Editor settingsEditor = settings.edit();
+						settingsEditor.putString("smbserverip", smbserverip);
+						settingsEditor.putString("prefsMAC", smbservermac);
+						settingsEditor.putBoolean("prefsMACverified", true);
+						prefsMACverified=true;
+						settingsEditor.apply();
+						break;
+					}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 
+		}
 		private static void makeToast(final String toastString) {
 			h = new Handler(MyContext.getMainLooper());
 			h.post(new Runnable() {

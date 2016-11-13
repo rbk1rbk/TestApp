@@ -172,6 +172,10 @@ public class CIFSbrowser extends ListActivity {
 			returnIntent.putExtra("servername", servername);
 			returnIntent.putExtra("sharename", sharename);
 			setResult(0, returnIntent);
+			startService(new Intent(this, PicSync.class)
+					.putExtra("servername",servername)
+					.setAction(PicSync.ACTION_UPDATE_WOL)
+			);
 		}
         finish();
     }

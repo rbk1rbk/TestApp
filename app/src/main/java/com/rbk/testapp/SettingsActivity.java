@@ -42,9 +42,14 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
 	protected void onActivityResult(int reqCode, int resCode, Intent data) {
 		if ((reqCode == 1000) & (resCode == 0) & (data != null)) {
 			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+			String oldservername=prefs.getString("prefsSMBSRV","");
+			String newservername = data.getStringExtra("servername");
 			SharedPreferences.Editor editor = prefs.edit();
+			if (!TextUtils.equals(oldservername,newservername)) {
+				editor.putBoolean("prefsMACverified", false);
+				editor.putString("prefsSMBSRV", newservername);
+			}
 			editor.putString("prefsSMBURI", data.getStringExtra("path"));
-			editor.putString("prefsSMBSRV", data.getStringExtra("servername"));
 			editor.putString("prefsSMBSHARE", data.getStringExtra("sharename"));
 			editor.commit();
 			finish();
