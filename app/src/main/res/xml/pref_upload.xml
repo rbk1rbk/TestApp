@@ -5,20 +5,6 @@
         <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     -->
     <Preference android:title="Local Media Folders">
-        <!--
-                              android:title="Local media folders to sync">
-                <Preference android:title="Find media folders">
-                    <intent
-                        android:action="android.intent.action.VIEW"
-                        android:targetClass="com.rbk.testapp.SyncedFoldersList"
-                        android:targetPackage="com.rbk.testapp">
-                        <extra
-                            android:name="action"
-                            android:value="com.rbk.testapp.PicSync.action.addMediaFolders"/>
-                    </intent>
-                </Preference>
-                <Preference android:title="Edit media folders list">
-        -->
         <intent
             android:action="android.intent.action.VIEW"
             android:targetClass="com.rbk.testapp.SyncedFoldersList"
@@ -30,6 +16,7 @@
     <PreferenceCategory
         android:title="Target Folder Structure">
         <SwitchPreference
+            android:defaultValue="false"
             android:key="prefCreatePerAlbumFolder"
             android:title="Per album folder?"
             />
@@ -37,14 +24,14 @@
         NAS FOLDER STRUCTURE
         -->
         <ListPreference
-            android:defaultValue="prefTGTFolderStructDate"
+            android:defaultValue="@string/prefTGTFolderStructDefault"
             android:entries="@array/prefTGTFolderStructNames"
             android:entryValues="@array/prefTGTFolderStructValues"
             android:key="prefTGTFolderStructure"
             android:title="NAS folder structure"
             />
         <ListPreference
-            android:defaultValue="yyyy/yyyy-MM-dd"
+            android:defaultValue="@string/prefsSubfolderNameFormatDefault"
             android:entries="@array/prefsSubfolderNameFormatNames"
             android:entryValues="@array/prefsSubfolderNameFormatValues"
             android:key="prefsSubfolderNameFormat"
@@ -54,7 +41,7 @@
         TARGET FILE FORMAT
         -->
         <ListPreference
-            android:defaultValue="prefTGTRenameOption_NoChange"
+            android:defaultValue="@string/prefTGTRenameOptionDefault"
             android:entries="@array/prefTGTRenameOptionNames"
             android:entryValues="@array/prefTGTRenameOptionValues"
             android:key="prefTGTRenameOption"
@@ -65,14 +52,14 @@
     <PreferenceCategory
         android:title="Target File Name Conflicts">
         <ListPreference
-            android:defaultValue="prefTGTAlreadyExistsTest_matchNameSize"
+            android:defaultValue="@string/prefTGTAlreadyExistsTestDefault"
             android:entries="@array/prefTGTAlreadyExistsTestNames"
             android:entryValues="@array/prefTGTAlreadyExistsTestValues"
             android:key="prefTGTAlreadyExistsTest"
             android:title="Files are considered identical when"
             />
         <ListPreference
-            android:defaultValue="prefTGTAlreadyExistsRename_number"
+            android:defaultValue="@string/prefTGTAlreadyExistsRenameDefault"
             android:entries="@array/prefTGTAlreadyExistsRenameNames"
             android:entryValues="@array/prefTGTAlreadyExistsRenameValues"
             android:key="prefTGTAlreadyExistsRename"
@@ -83,9 +70,9 @@
         android:title="Local Media Retention">
         <EditTextPreference
             android:defaultValue="0"
+            android:inputType="numberDecimal"
             android:key="prefSRCShrinkAfter"
             android:title="Shrink copied files after XX days (0 means never)"
-            android:inputType="numberDecimal"
             />
         <SwitchPreference
             android:key="prefSRCRenameShrinked"
@@ -93,8 +80,8 @@
             />
         <EditTextPreference
             android:defaultValue="0"
-            android:key="prefSRCDeleteAfter"
             android:inputType="numberDecimal"
+            android:key="prefSRCDeleteAfter"
             android:title="Delete copied files after XX days (0 means never)"
             />
     </PreferenceCategory>

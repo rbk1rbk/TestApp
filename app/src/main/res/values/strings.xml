@@ -67,17 +67,17 @@
         <item>prefTGTFolderStructFlat</item>
         <item>prefTGTFolderStructDate</item>
     </string-array>
+    <string name="prefTGTFolderStructDefault">prefTGTFolderStructDate</string>
 
     <string-array name="prefTGTRenameOptionNames">
         <item>No Change</item>
-        <item>YearMonthDay.[ext]</item>
-        <item>Year-Month-Day.[ext]</item>
+        <item>YearMonthDay-HourMinuteSecond.[ext]</item>
     </string-array>
     <string-array name="prefTGTRenameOptionValues">
         <item>prefTGTRenameOption_NoChange</item>
-        <item>prefTGTRenameOption_YMD</item>
-        <item>prefTGTRenameOption_Y-M-D</item>
+        <item>prefTGTRenameOption_YMD-HMS</item>
     </string-array>
+    <string name="prefTGTRenameOptionDefault">prefTGTRenameOption_NoChange</string>
 
     <string-array name="prefsSubfolderNameFormatNames">
         <item>No Change</item>
@@ -95,6 +95,7 @@
         <item>yyyy/MM/yyyy-MM-dd</item>
         <item>yyyy/MM/dd</item>
     </string-array>
+    <string name="prefsSubfolderNameFormatDefault">yyyy/yyyy-MM-dd</string>
 
     <string-array name="prefTGTAlreadyExistsTestNames">
         <item>Names match</item>
@@ -106,13 +107,15 @@
         <item>prefTGTAlreadyExistsTest_matchNameSize</item>
         <item>prefTGTAlreadyExistsTest_matchNameSizeCksum</item>
     </string-array>
+    <string name="prefTGTAlreadyExistsTestDefault">prefTGTAlreadyExistsTest_matchNameSize</string>
 
     <string-array name="prefTGTAlreadyExistsRenameNames">
-        <item>filename.[devicename].[ext]</item>
+        <item>filename.[currdate].[ext]</item>
         <item>filename.[01].[ext]</item>
     </string-array>
     <string-array name="prefTGTAlreadyExistsRenameValues">
-        <item>prefTGTAlreadyExistsRename_devicename</item>
+        <item>prefTGTAlreadyExistsRename_currdate</item>
         <item>prefTGTAlreadyExistsRename_number</item>
     </string-array>
+    <string name="prefTGTAlreadyExistsRenameDefault">prefTGTAlreadyExistsRename_number</string>
 </resources>

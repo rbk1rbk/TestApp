@@ -67,14 +67,6 @@ import static java.lang.Thread.sleep;
 public class PicSync extends IntentService{
 	public static final String STATE = "State";
 	public static final String NOTIFICATION = "com.rbk.testapp.MainScreen.receiver";
-
-	private static String MyState = "Not running";
-	private final Context MyContext = this;
-	private final String timestampFileName = "timestampFile";
-	private static File timestampFile;
-	private static IBinder myBinder;
-	private static boolean prefsMACverified = false;
-
 	static final String ACTION_GET_STATE = "PicSync.GetState";
 	static final String ACTION_START_SYNC = "PicSync.Start";
 	static final String ACTION_START_SYNC_FLAG = "PicSync.Start.Restart";
@@ -87,13 +79,11 @@ public class PicSync extends IntentService{
 	static final String ACTION_SUGGEST_MEDIA_SCAN = "PicSync.suggestMediaScan";
 	static final String ACTION_SET_LAST_IMAGE_TIMESTAMP = "PicSync.setLastImageTimestamp";
 	static final String ACTION_UPDATE_WOL = "PicSync.updateWOL";
-
-
-
-
+	static final int cifsAllowedBrowsables = SmbFile.TYPE_WORKGROUP | SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
+	static final int cifsAllowedBrowsablesForUp = SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
+	static final int cifsAllowedToSelect = SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
 	static String smblocalhostname = "testovacimobil";
 	static String picSyncLogFile = "testapp." + smblocalhostname + ".log";
-
 	static String smbservername = null;
 	static String smbuser = null;
 	static String smbpasswd = null;
@@ -104,37 +94,112 @@ public class PicSync extends IntentService{
 	static NtlmPasswordAuthentication auth = null;
 	static boolean authenticated = false;
 	static boolean isNASConnected = false;
-
-	static final int cifsAllowedBrowsables = SmbFile.TYPE_WORKGROUP | SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
-	static final int cifsAllowedBrowsablesForUp = SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
-	static final int cifsAllowedToSelect = SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
-	private List values;
-
+	static String prefTGTFolderStructure, prefsSubfolderNameFormat, prefTGTRenameOption, prefTGTAlreadyExistsTest, prefTGTAlreadyExistsRename;
+	static boolean prefCreatePerAlbumFolder;
+	static Date lastCopiedImageTimestamp;
+	static long lastScannedImageTimestamp;
+	private static String MyState = "Not running";
+	private static File timestampFile;
+	private static IBinder myBinder;
+	private static boolean prefsMACverified = false;
 	private static Handler h;
 	private static String fileurl;
 	private static SharedPreferences settings;
 	private static boolean SharedPreferencesChanged = true;
 	private static boolean isConnectedToWifi = false;
-
 	private static Integer mediaFilesCountTotal = 0;
 	private static Integer mediaFilesScanned = 0;
 	private static Integer mediaFilesCountToSync = 0;
-	static Date lastCopiedImageTimestamp;
-	static long lastScannedImageTimestamp;
 	private static MediaFilesDBclass MediaFilesDB;
-
-	private enum ePicSyncState {PIC_SYNC_STATE_STOPPED, PIC_SYNC_STATE_RUNNING, PIC_SYNC_STATE_NO_ACCESS, PIC_SYNC_STATE_STOP};
 	private static volatile ePicSyncState PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
-
-	private final NASService nasService = new NASService(MyContext);
-
-	public PicSync() {
-		super("PicSync");
+	final FilenameFilter pictureFileFilterWithTimestamp = new FilenameFilter() {
+		@Override
+		public boolean accept(File dir, String pathname) {
+			String dirname = dir.getAbsolutePath().toLowerCase();
+			String lowercase = pathname.toLowerCase();
+			String fullpath = dirname + "/" + lowercase;
+			File f = new File(dir.getAbsolutePath() + "/" + pathname);
+			boolean isItDirectory = f.isDirectory();
+			if (!isItDirectory) {
 /*
-		nasService = new NASService();
+				if (f.lastModified() <= lastCopiedImageTimestamp.getTime()) {
 */
-	}
+				if (f.lastModified() <= lastScannedImageTimestamp) {
+					return false;
+				}
+			} else
+				return true;
+			if (lowercase.startsWith("."))
+				return false;
+			if (lowercase.endsWith("jpg"))
+				return true;
+			if (lowercase.endsWith("jpeg"))
+				return true;
+			if (lowercase.endsWith("png"))
+				return true;
+			if (lowercase.endsWith("raw"))
+				return true;
+			if (lowercase.endsWith("mp4"))
+				return true;
+			if (lowercase.endsWith("mpg"))
+				return true;
+			if (lowercase.endsWith("avi"))
+				return true;
+			return false;
+		}
+	};
+	final FilenameFilter pictureFileFilter = new FilenameFilter() {
+		@Override
+		public boolean accept(File dir, String pathname) {
+			String dirname = dir.getAbsolutePath().toLowerCase();
+			String lowercase = pathname.toLowerCase();
 
+			if (lowercase.startsWith("."))
+				return false;
+			if (lowercase.endsWith("jpg"))
+				return true;
+			if (lowercase.endsWith("jpeg"))
+				return true;
+			if (lowercase.endsWith("png"))
+				return true;
+			if (lowercase.endsWith("raw"))
+				return true;
+			if (lowercase.endsWith("mp4"))
+				return true;
+			if (lowercase.endsWith("mpg"))
+				return true;
+			if (lowercase.endsWith("avi"))
+				return true;
+			return new File(dir.getAbsolutePath() + "/" + pathname).isDirectory();
+		}
+	};
+	final FilenameFilter pictureFolderFilter = new FilenameFilter() {
+		@Override
+		public boolean accept(File dir, String pathname) {
+			String dirname = dir.getAbsolutePath().toLowerCase();
+			String lowercase = pathname.toLowerCase();
+			String fullpath = dirname + "/" + lowercase;
+			File fullpathFile = new File(dir.getAbsolutePath() + "/" + pathname);
+			if (!fullpathFile.isDirectory())
+				return false;
+			if (fullpath.startsWith("."))
+				return false;
+			if (fullpath.contains("images") || fullpath.contains("dcim") || fullpath.contains("pictures") || fullpath.contains("video"))
+				return true;
+			else
+				return false;
+		}
+	};
+
+	private final Context MyContext = this;
+	private final String timestampFileName = "timestampFile";
+	private final NASService nasService = new NASService(MyContext);
+	private final Runnable DoSyncInSeparateThread = new Runnable() {
+		@Override
+		public void run() {
+			DoSyncFromDB();
+		}
+	};
 	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
 			new SharedPreferences.OnSharedPreferenceChangeListener() {
 				public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
@@ -143,6 +208,125 @@ public class PicSync extends IntentService{
 					}
 				}
 			};
+	SmbFileFilter browseCIFSFilter = new SmbFileFilter() {
+		@Override
+		public boolean accept(SmbFile file) {
+			int filetype = 0;
+			try {
+				filetype = file.getType();
+			} catch (SmbException e) {
+				e.printStackTrace();
+				if (e.toString().contains("Logon failure")) {
+					authenticated = false;
+					isNASConnected = false;
+				}
+				return false;
+			}
+			String filepath = file.getPath();
+			String filename = file.getName();
+			if (filename.endsWith("/"))
+				filename = TextUtils.substring(filename, 0, TextUtils.lastIndexOf(filename, '/'));
+			int tmp = filetype & cifsAllowedBrowsables;
+			if ((filetype & cifsAllowedBrowsables) == 0)
+				return false;
+			if (filename.startsWith(".") || filename.contains("$"))
+				return false;
+			boolean isDir = false;
+			try {
+				isDir = file.isDirectory();
+			} catch (SmbException e) {
+				e.printStackTrace();
+			}
+			return isDir;
+		}
+	};
+	private List values;
+
+	public PicSync() {
+		super("PicSync");
+/*
+		nasService = new NASService();
+*/
+	}
+
+	private static String constructNASPath(String srcFileNameFull, long srcFileTimestamp) {
+		String tgtFileNameFull;
+		if (tgtNASPath == null) {
+			tgtNASPath = settings.getString("prefsSMBURI", null);
+			if (tgtNASPath.endsWith("/"))
+				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
+		}
+		String tgtFilePath = tgtNASPath;
+		String srcFileName = srcFileNameFull.substring(srcFileNameFull.lastIndexOf('/') + 1);
+		String srcFilePath = srcFileNameFull.substring(0, srcFileNameFull.lastIndexOf('/'));
+		String srcFileExtDot = srcFileName.substring(srcFileName.lastIndexOf("."));
+		String tgtFileName; //initial assumption
+		if (prefCreatePerAlbumFolder) {
+			String albumFolderName = srcFilePath.substring(srcFilePath.lastIndexOf('/') + 1);
+			tgtFilePath = tgtFilePath + "/" + albumFolderName;
+		}
+		if (prefTGTFolderStructure.equalsIgnoreCase("prefTGTFolderStructDate")) {
+			SimpleDateFormat dateFormat = new SimpleDateFormat(prefsSubfolderNameFormat);
+			String dateSubfolderName = dateFormat.format(new Date(srcFileTimestamp));
+			tgtFilePath = tgtFilePath + "/" + dateSubfolderName;
+		}
+		if (prefTGTRenameOption.equalsIgnoreCase("prefTGTRenameOption_YMD-HMS")) {
+			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
+			tgtFileName = dateFormat.format(new Date(srcFileTimestamp)) + srcFileExtDot;
+		} else
+			//prefTGTRenameOption_NoChange
+			tgtFileName = srcFileName;
+		tgtFileNameFull = tgtFilePath + "/" + tgtFileName;
+
+		if (!NASService.checkConnection())
+			return null;
+		Integer renameNumber = 1;
+		String tgtFileNameBase = tgtFileName.substring(0, tgtFileName.lastIndexOf("."));
+		try {
+			while (new SmbFile(tgtFileNameFull, auth).exists()) {
+				// detect, if it is the same file
+				if (prefTGTAlreadyExistsTest.equalsIgnoreCase("prefTGTAlreadyExistsTest_matchName")) {
+					return null;
+				} else if (prefTGTAlreadyExistsTest.equalsIgnoreCase("prefTGTAlreadyExistsTest_matchNameSize")) {
+					long srcFileTS = new File(srcFileNameFull).lastModified();
+					long tgtFileTS = new File(tgtFileNameFull).lastModified();
+					if (srcFileTS == tgtFileTS)
+						return null;
+				} else if (prefTGTAlreadyExistsTest.equalsIgnoreCase("prefTGTAlreadyExistsTest_matchNameSizeCksum")) {
+					// TODO: Implement checksums
+					return null;
+				}
+				// if not, make a new name
+				if (prefTGTAlreadyExistsRename.equalsIgnoreCase("prefTGTAlreadyExistsRename_currdate")) {
+					SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
+					tgtFileName = tgtFileNameBase + "." + dateFormat.format(new Date(srcFileTimestamp)) + srcFileExtDot;
+				} else if (prefTGTAlreadyExistsRename.equalsIgnoreCase("prefTGTAlreadyExistsRename_number")) {
+					tgtFileName = tgtFileNameBase + "." + String.format("%02d", renameNumber) + srcFileExtDot;
+					renameNumber++;
+				}
+				tgtFileNameFull = tgtFilePath + "/" + tgtFileName;
+			}
+		} catch (SmbException | MalformedURLException e) {
+			e.getMessage();
+			String exceptionString = e.toString();
+		}
+		return tgtFileNameFull;
+	}
+
+	static private void saveLastCopiedImageTimestamp(Date timestamp) {
+		if (lastCopiedImageTimestamp.getTime() > timestamp.getTime())
+			return;
+		lastCopiedImageTimestamp = timestamp;
+		timestampFile.setLastModified(lastCopiedImageTimestamp.getTime());
+	}
+
+	static private void saveLastCopiedImageTimestamp() {
+		saveLastCopiedImageTimestamp(new Date());
+	}
+
+	static private void saveLastCopiedImageTimestamp(long timestamp) {
+		saveLastCopiedImageTimestamp(new Date(timestamp));
+	}
 
 	@Override
 	public void onCreate() {
@@ -153,6 +337,7 @@ public class PicSync extends IntentService{
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_NO_ACCESS;
 			MyState = "No access to external storage";
 		}
+		PreferenceManager.setDefaultValues(MyContext, R.xml.pref_upload, false);
 		settings = PreferenceManager.getDefaultSharedPreferences(this);
 		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
 		Intent intent = new Intent(this, PicSyncScheduler.class);
@@ -175,8 +360,19 @@ public class PicSync extends IntentService{
 			broadcastState("Not Configured");
 		if (!prefsMACverified)
 			prefsMACverified = settings.getBoolean("prefsMACverified",false);
+		getAllSettings();
 		broadcastConnectionStatus();
 		startService(intent);
+	}
+
+	private void getAllSettings() {
+		PreferenceManager.setDefaultValues(MyContext, R.xml.pref_upload, false);
+		prefTGTFolderStructure = settings.getString(prefTGTFolderStructure, getString(R.string.prefTGTFolderStructDefault));
+		prefsSubfolderNameFormat = settings.getString(prefsSubfolderNameFormat, getString(R.string.prefsSubfolderNameFormatDefault));
+		prefTGTRenameOption = settings.getString(prefTGTRenameOption, getString(R.string.prefTGTRenameOptionDefault));
+		prefTGTAlreadyExistsTest = settings.getString(prefTGTAlreadyExistsTest, getString(R.string.prefTGTAlreadyExistsTestDefault));
+		prefTGTAlreadyExistsRename = settings.getString(prefTGTAlreadyExistsRename, getString(R.string.prefTGTAlreadyExistsRenameDefault));
+		prefCreatePerAlbumFolder = settings.getBoolean("prefCreatePerAlbumFolder", false);
 	}
 
 	public int onStartCommand(Intent intent, int flags, int startId) {
@@ -187,12 +383,6 @@ public class PicSync extends IntentService{
 			PicSyncState=ePicSyncState.PIC_SYNC_STATE_STOP;
 		myBinder = new LocalBinder();
 		return START_STICKY;
-	}
-
-	public class LocalBinder extends Binder {
-		PicSync getService() {
-			return PicSync.this;
-		}
 	}
 
 	@Override
@@ -219,39 +409,6 @@ public class PicSync extends IntentService{
 		Log.d("PicSync", "onTaskRemoved");
 		super.onTaskRemoved(rootIntent);
 	}
-
-	SmbFileFilter browseCIFSFilter = new SmbFileFilter() {
-		@Override
-		public boolean accept(SmbFile file) {
-			int filetype = 0;
-			try {
-				filetype = file.getType();
-			} catch (SmbException e) {
-				e.printStackTrace();
-				if (e.toString().contains("Logon failure")) {
-					authenticated = false;
-					isNASConnected = false;
-				}
-				return false;
-			}
-			String filepath = file.getPath();
-			String filename = file.getName();
-			if (filename.endsWith("/"))
-				filename = TextUtils.substring(filename, 0, TextUtils.lastIndexOf(filename, '/'));
-			int tmp = filetype & cifsAllowedBrowsables;
-			if ((filetype & cifsAllowedBrowsables) == 0)
-				return false;
-			if (filename.startsWith(".") || filename.contains("$"))
-				return false;
-			boolean isDir=false;
-			try {
-				isDir=file.isDirectory();
-			} catch (SmbException e) {
-				e.printStackTrace();
-			}
-			return isDir;
-		}
-	};
 
 	public void BrowseCIFS(String path) {
 		if (values == null)
@@ -591,87 +748,6 @@ public class PicSync extends IntentService{
 		return rv.toArray(new String[rv.size()]);
 	}
 
-	final FilenameFilter pictureFileFilterWithTimestamp = new FilenameFilter() {
-		@Override
-		public boolean accept(File dir, String pathname) {
-			String dirname = dir.getAbsolutePath().toLowerCase();
-			String lowercase = pathname.toLowerCase();
-			String fullpath = dirname + "/" + lowercase;
-			File f = new File(dir.getAbsolutePath() + "/" + pathname);
-			boolean isItDirectory = f.isDirectory();
-			if (!isItDirectory) {
-/*
-				if (f.lastModified() <= lastCopiedImageTimestamp.getTime()) {
-*/
-				if (f.lastModified() <= lastScannedImageTimestamp) {
-					return false;
-				}
-			} else
-				return true;
-			if (lowercase.startsWith("."))
-				return false;
-			if (lowercase.endsWith("jpg"))
-				return true;
-			if (lowercase.endsWith("jpeg"))
-				return true;
-			if (lowercase.endsWith("png"))
-				return true;
-			if (lowercase.endsWith("raw"))
-				return true;
-			if (lowercase.endsWith("mp4"))
-				return true;
-			if (lowercase.endsWith("mpg"))
-				return true;
-			if (lowercase.endsWith("avi"))
-				return true;
-			return false;
-		}
-	};
-
-	final FilenameFilter pictureFileFilter = new FilenameFilter() {
-		@Override
-		public boolean accept(File dir, String pathname) {
-			String dirname = dir.getAbsolutePath().toLowerCase();
-			String lowercase = pathname.toLowerCase();
-
-			if (lowercase.startsWith("."))
-				return false;
-			if (lowercase.endsWith("jpg"))
-				return true;
-			if (lowercase.endsWith("jpeg"))
-				return true;
-			if (lowercase.endsWith("png"))
-				return true;
-			if (lowercase.endsWith("raw"))
-				return true;
-			if (lowercase.endsWith("mp4"))
-				return true;
-			if (lowercase.endsWith("mpg"))
-				return true;
-			if (lowercase.endsWith("avi"))
-				return true;
-			return new File(dir.getAbsolutePath() + "/" + pathname).isDirectory();
-		}
-	};
-
-	final FilenameFilter pictureFolderFilter = new FilenameFilter() {
-		@Override
-		public boolean accept(File dir, String pathname) {
-			String dirname = dir.getAbsolutePath().toLowerCase();
-			String lowercase = pathname.toLowerCase();
-			String fullpath = dirname + "/" + lowercase;
-			File fullpathFile = new File(dir.getAbsolutePath() + "/" + pathname);
-			if (!fullpathFile.isDirectory())
-				return false;
-			if (fullpath.startsWith("."))
-				return false;
-			if (fullpath.contains("images") || fullpath.contains("dcim") || fullpath.contains("pictures") || fullpath.contains("video"))
-				return true;
-			else
-				return false;
-		}
-	};
-
 	String[] listPictures(String dir, String params) {
 		Set<String> listOfFiles = new HashSet<String>();
 		File[] filelist;
@@ -888,11 +964,8 @@ public class PicSync extends IntentService{
 		return mediaFilesCountToSync;
 	}
 
-	private SmbFile resolveTGTNameConflict(SmbFile tgtFile) {
-		SmbFile newTGTFile = null;
-		String filename, name, suffix;
-		return newTGTFile;
-	}
+	;
+
 	private boolean createNASPath(String smbFile){
 		String smbPath=smbFile.substring(0,smbFile.lastIndexOf("/"));
 		try {
@@ -930,6 +1003,7 @@ public class PicSync extends IntentService{
 */
 		return  true;
 	}
+
 	private boolean copyFileToNAS(String src, String tgt, long timestamp) {
 		String tgtTMP = tgt + ".picsync";
 		boolean rc = true;
@@ -948,10 +1022,6 @@ public class PicSync extends IntentService{
 			tgtFile = new SmbFile(tgt, auth);
 			try {
 				boolean fileExists=tgtFile.exists();
-/*TODO
-				if (fileExists)
-					tgtFile = resolveTGTNameConflict(tgtFile);
-*/
 				tgtFile.createNewFile();
 				tgtFile.delete();
 			} catch (SmbException e) {
@@ -965,7 +1035,7 @@ public class PicSync extends IntentService{
 			tgtFileStream = new SmbFileOutputStream(tgtFileTMP);
 			int read = 0;
 			long read_total = 0;
-			while (((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) && PicSyncState != ePicSyncState.PIC_SYNC_STATE_RUNNING) {
+			while (((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) && PicSyncState == ePicSyncState.PIC_SYNC_STATE_RUNNING) {
 				read_total += read;
 				tgtFileStream.write(buffer, 0, read);
 			}
@@ -1012,19 +1082,10 @@ public class PicSync extends IntentService{
 		return rc;
 	}
 
-	private static String constructNASPath(String srcFileNameFull, long srcFileTimestamp) {
-		if (tgtNASPath == null) {
-			tgtNASPath = settings.getString("prefsSMBURI", null);
-			if (tgtNASPath.endsWith("/"))
-				tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/") - 1);
-		}
-		String srcFileName = srcFileNameFull.substring(srcFileNameFull.lastIndexOf('/') + 1);
-		File tgtFile = new File(srcFileNameFull);
-		final String FolderFormat="yyyy/yyyy-MM-dd";
-		final SimpleDateFormat dateFormat = new SimpleDateFormat(FolderFormat);
-		String FolderName = dateFormat.format(new Date(srcFileTimestamp));
-		String tgtFileNameFull = tgtNASPath + "/" + FolderName + "/" + srcFileName;
-		return tgtFileNameFull;
+	private SmbFile resolveTGTNameConflict(SmbFile tgtFile) {
+		SmbFile newTGTFile = null;
+		String filename, name, suffix;
+		return newTGTFile;
 	}
 
 	final public void DoSyncFromDB() {
@@ -1078,20 +1139,9 @@ public class PicSync extends IntentService{
 		if ((PicSyncState != ePicSyncState.PIC_SYNC_STATE_RUNNING) && (Looper.getMainLooper().getThread() != Thread.currentThread()))
 			stopSelf();
 	}
-	private final Runnable DoSyncInSeparateThread = new Runnable() {
-		@Override
-		public void run() {
-/*
-			if (Looper.getMainLooper().getThread() != Thread.currentThread()) {
-				throw new IllegalStateException(
-						"This runnable can only be called in the Main thread!");
-			}
-*/
-			DoSyncFromDB();
-		}
-	};
+
 	public void DoSync() {
-		Log.i("PicSync", "Sync initiaged");
+		Log.i("PicSync", "Sync initiated");
 		scanMediaFilesToSync();
 		Set<String> mediaFilesToSync = listMediaFilesToSync();
 		if (mediaFilesToSync != null) {
@@ -1198,21 +1248,6 @@ public class PicSync extends IntentService{
 		}
 	}
 
-	static private void saveLastCopiedImageTimestamp(Date timestamp) {
-		if (lastCopiedImageTimestamp.getTime() > timestamp.getTime())
-			return;
-		lastCopiedImageTimestamp = timestamp;
-		timestampFile.setLastModified(lastCopiedImageTimestamp.getTime());
-	}
-
-	static private void saveLastCopiedImageTimestamp() {
-		saveLastCopiedImageTimestamp(new Date());
-	}
-
-	static private void saveLastCopiedImageTimestamp(long timestamp) {
-		saveLastCopiedImageTimestamp(new Date(timestamp));
-	}
-
 	private void writeLogFile(String message) {
 		SmbFile smbLogFile;
 		SmbFileOutputStream smbLogFileOutputStream;
@@ -1278,17 +1313,18 @@ public class PicSync extends IntentService{
 		}
 	}
 
+	private enum ePicSyncState {PIC_SYNC_STATE_STOPPED, PIC_SYNC_STATE_RUNNING, PIC_SYNC_STATE_NO_ACCESS, PIC_SYNC_STATE_STOP}
 
 	/*
 		************************************************************************************************
 	*/
 	private static class MediaFilesDBclass extends SQLiteOpenHelper {
-		public static final int DATABASE_VERSION = 1;
-		public static final String DATABASE_NAME = "PicSync.db";
+		static final int DATABASE_VERSION = 1;
+		static final String DATABASE_NAME = "PicSync.db";
 		private static boolean dbOpened = false;
 		private static SQLiteDatabase db;
 
-		public MediaFilesDBclass(Context ctx) {
+		MediaFilesDBclass(Context ctx) {
 			super(ctx, DATABASE_NAME, null, DATABASE_VERSION);
 		}
 
@@ -1296,7 +1332,7 @@ public class PicSync extends IntentService{
 			return insertSrcFile(srcMediaFileNameFull);
 		}
 
-		public boolean insertSrcFile(String srcMediaFileNameFull) {
+		boolean insertSrcFile(String srcMediaFileNameFull) {
 			db = getWritableDatabase();
 			File mediaFile = new File(srcMediaFileNameFull);
 			Long lastModified = mediaFile.lastModified();
@@ -1313,7 +1349,7 @@ public class PicSync extends IntentService{
 			return true;
 		}
 
-		public boolean removeSrcFile(String srcMediaFileNameFull) {
+		boolean removeSrcFile(String srcMediaFileNameFull) {
 			db = getWritableDatabase();
 			try {
 				db.delete(Constants.MediaFilesDBEntry.TABLE_NAME, Constants.MediaFilesDBEntry.COLUMN_NAME_SRC + "=\"" + srcMediaFileNameFull + "\"", null);
@@ -1324,7 +1360,7 @@ public class PicSync extends IntentService{
 			return true;
 		}
 
-		public boolean containsSrcFile(String srcFile) {
+		boolean containsSrcFile(String srcFile) {
 			db = getReadableDatabase();
 			Cursor cChkFile;
 			if (db == null)
@@ -1343,7 +1379,7 @@ public class PicSync extends IntentService{
 			}
 		}
 
-		public void getDBStatistics() {
+		void getDBStatistics() {
 			db = getWritableDatabase();
 			Cursor c = db.rawQuery("select count (*) from " + Constants.MediaFilesDBEntry.TABLE_NAME, null);
 			c.moveToFirst();
@@ -1378,8 +1414,7 @@ public class PicSync extends IntentService{
 					, null);
 			cHighestSyncedTimestamp.moveToFirst();
 			long highestSyncedTimestamp = cHighestSyncedTimestamp.getLong(0);
-			
-			
+
 
 			if (highestSyncedTimestamp == 0)
 				saveLastCopiedImageTimestamp(1);
@@ -1441,7 +1476,7 @@ public class PicSync extends IntentService{
 		************************************************************************************************
 	*/
 	static class NASService {
-		private static Context MyContext;
+		static Context MyContext;
 
 		NASService(Context ctx) {
 			MyContext = ctx;
@@ -1525,7 +1560,7 @@ public class PicSync extends IntentService{
 */
 			isNASConnected = true;
 			SmbFile[] domains = null;
-			SmbFile domainsFile = null;
+			SmbFile domainsFile;
 			try {
 				domainsFile = new SmbFile("smb:///", auth);
 			} catch (MalformedURLException e) {
@@ -1637,6 +1672,12 @@ public class PicSync extends IntentService{
 					Toast.makeText(MyContext, toastString, Toast.LENGTH_LONG).show();
 				}
 			});
+		}
+	}
+
+	public class LocalBinder extends Binder {
+		PicSync getService() {
+			return PicSync.this;
 		}
 	}
 }

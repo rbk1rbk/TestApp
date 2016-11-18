@@ -8,9 +8,11 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.PersistableBundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.ContextCompat;
@@ -27,25 +29,32 @@ import android.widget.DatePicker;
 import android.widget.TextView;
 import android.widget.TimePicker;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Map;
+
+import static android.os.Environment.getExternalStorageDirectory;
 
 public class MainScreen extends AppCompatActivity {
-    static TextView twPicSyncState;
-	private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
-	private final Context MyContext = this;
 	private static final int mId=1;
-
-
+	private static String PACKAGE_NAME;
 	private static boolean alreadyRunning = false;
 	private static boolean MainScreenReceiverRegistered=false;
 	private static int MainScreenReceiverRegisteredCount=0;
-    static Button button;
-    private final int READ_EXTERNAL_STORAGE_PERMISSION_CODE=101;
-
 	private static String localPicSyncState, localTotalImages, localScannedImages, localUnsyncedImages, localNASConnectivity, localCopyFrom, localCopyTo;
+	private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
+	private final Context MyContext = this;
+	private final int READ_EXTERNAL_STORAGE_PERMISSION_CODE = 101;
+	TextView twPicSyncState;
+	Button button;
 	private long localLastCopiedImageTimestamp;
 
 
@@ -126,6 +135,101 @@ public class MainScreen extends AppCompatActivity {
 		   showDialogSetLastRun();
 		   return true;
 	   }
+	   if (id == R.id.action_export) {
+		   boolean res = false;
+		   String resMessage = "All settings but password was exported to ";
+		   ObjectOutputStream output = null;
+		   SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(this);
+		   String smbpasswd = settings.getString(getResources().getString(R.string.pref_cifs_password), "");
+		   settings.edit()
+				   .putString(getString(R.string.pref_cifs_password), "")
+				   .apply();
+		   File exportFile = new File(getExternalStorageDirectory(), "picsync_preferences.xml");
+		   try {
+			   FileOutputStream exportFileWriter = new FileOutputStream(exportFile);
+			   output = new ObjectOutputStream(exportFileWriter);
+			   output.writeObject(settings.getAll());
+			   res = true;
+		   } catch (IOException e) {
+			   e.printStackTrace();
+			   resMessage = "Problem exporting settings: " + e.getMessage();
+		   } finally {
+			   settings.edit()
+					   .putString(getString(R.string.pref_cifs_password), smbpasswd)
+					   .apply();
+			   AlertDialog.Builder aDialog = new AlertDialog.Builder(MyContext);
+			   aDialog.setMessage(resMessage + exportFile.getAbsolutePath());
+			   aDialog.setCancelable(true);
+			   aDialog.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+				   public void onClick(DialogInterface dialog, int id) {
+					   dialog.dismiss();
+				   }
+			   });
+			   aDialog.show();
+			   try {
+				   if (output != null) {
+					   output.flush();
+					   output.close();
+				   }
+			   } catch (IOException ex) {
+				   ex.printStackTrace();
+			   }
+		   }
+		   return res;
+	   }
+	   if (id == R.id.action_import) {
+		   boolean res = false;
+		   ObjectInputStream input = null;
+		   String resMessage = "Settings imported. Remember to set CIFS password.";
+		   try {
+			   String envExternalStorage = System.getenv("EXTERNAL_STORAGE");
+			   String canonicalPath = new File(envExternalStorage).getCanonicalPath();
+			   File exportFile = new File(canonicalPath, "picsync_preferences.xml");
+			   FileInputStream exportFileReader = new FileInputStream(exportFile);
+			   input = new ObjectInputStream(exportFileReader);
+			   SharedPreferences.Editor prefEdit = PreferenceManager.getDefaultSharedPreferences(this).edit();
+			   prefEdit.clear();
+			   Map<String, ?> entries = (Map<String, ?>) input.readObject();
+			   for (Map.Entry<String, ?> entry : entries.entrySet()) {
+				   Object v = entry.getValue();
+				   String key = entry.getKey();
+
+				   if (v instanceof Boolean)
+					   prefEdit.putBoolean(key, ((Boolean) v).booleanValue());
+				   else if (v instanceof Float)
+					   prefEdit.putFloat(key, ((Float) v).floatValue());
+				   else if (v instanceof Integer)
+					   prefEdit.putInt(key, ((Integer) v).intValue());
+				   else if (v instanceof Long)
+					   prefEdit.putLong(key, ((Long) v).longValue());
+				   else if (v instanceof String)
+					   prefEdit.putString(key, ((String) v));
+			   }
+			   prefEdit.commit();
+			   res = true;
+		   } catch (IOException | ClassNotFoundException e) {
+			   e.printStackTrace();
+			   resMessage = "Problem exporting settings: " + e.getMessage();
+		   } finally {
+			   AlertDialog.Builder aDialog = new AlertDialog.Builder(MyContext);
+			   aDialog.setMessage(resMessage);
+			   aDialog.setCancelable(true);
+			   aDialog.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+				   public void onClick(DialogInterface dialog, int id) {
+					   dialog.dismiss();
+				   }
+			   });
+			   aDialog.show();
+			   try {
+				   if (input != null) {
+					   input.close();
+				   }
+			   } catch (IOException ex) {
+				   ex.printStackTrace();
+			   }
+		   }
+		   return res;
+	   }
 	   return super.onOptionsItemSelected(item);
    }
 
@@ -133,8 +237,9 @@ public class MainScreen extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main_screen);
-        Log.i("MainScreen", "onCreate called");
-        twPicSyncState = (TextView) findViewById(R.id.twPicSyncState);
+		PACKAGE_NAME = getApplicationContext().getPackageName();
+		Log.i("MainScreen", "onCreate called");
+		twPicSyncState = (TextView) findViewById(R.id.twPicSyncState);
         if (alreadyRunning) {
             Log.i("MainScreen", "Already running, return");
             return;
