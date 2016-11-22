@@ -57,14 +57,7 @@ import jcifs.smb.SmbFileOutputStream;
 
 import static java.lang.Thread.sleep;
 
-/**
- * An {@link IntentService} subclass for handling asynchronous task requests in
- * a service on a separate handler thread.
- * <p/>
- * TODO: Customize class - update intent actions, extra parameters and static
- * helper methods.
- */
-public class PicSync extends IntentService{
+public class PicSync extends IntentService {
 	public static final String STATE = "State";
 	public static final String NOTIFICATION = "com.rbk.testapp.MainScreen.receiver";
 	static final String ACTION_GET_STATE = "PicSync.GetState";
@@ -112,6 +105,7 @@ public class PicSync extends IntentService{
 	private static Integer mediaFilesCountToSync = 0;
 	private static MediaFilesDBclass MediaFilesDB;
 	private static volatile ePicSyncState PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
+	private static boolean constructNASPathErrorFileExist=false;
 	final FilenameFilter pictureFileFilterWithTimestamp = new FilenameFilter() {
 		@Override
 		public boolean accept(File dir, String pathname) {
@@ -119,18 +113,15 @@ public class PicSync extends IntentService{
 			String lowercase = pathname.toLowerCase();
 			String fullpath = dirname + "/" + lowercase;
 			File f = new File(dir.getAbsolutePath() + "/" + pathname);
+			if (lowercase.startsWith("."))
+				return false;
 			boolean isItDirectory = f.isDirectory();
 			if (!isItDirectory) {
-/*
-				if (f.lastModified() <= lastCopiedImageTimestamp.getTime()) {
-*/
 				if (f.lastModified() <= lastScannedImageTimestamp) {
 					return false;
 				}
 			} else
 				return true;
-			if (lowercase.startsWith("."))
-				return false;
 			if (lowercase.endsWith("jpg"))
 				return true;
 			if (lowercase.endsWith("jpeg"))
@@ -194,6 +185,7 @@ public class PicSync extends IntentService{
 	private final Context MyContext = this;
 	private final String timestampFileName = "timestampFile";
 	private final NASService nasService = new NASService(MyContext);
+
 	private final Runnable DoSyncInSeparateThread = new Runnable() {
 		@Override
 		public void run() {
@@ -222,7 +214,7 @@ public class PicSync extends IntentService{
 				}
 				return false;
 			}
-			String filepath = file.getPath();
+			String filepath = file.getParent();
 			String filename = file.getName();
 			if (filename.endsWith("/"))
 				filename = TextUtils.substring(filename, 0, TextUtils.lastIndexOf(filename, '/'));
@@ -250,6 +242,13 @@ public class PicSync extends IntentService{
 	}
 
 	private static String constructNASPath(String srcFileNameFull, long srcFileTimestamp) {
+		String srcFileName = srcFileNameFull.substring(srcFileNameFull.lastIndexOf('/') + 1);
+		String srcFilePath = srcFileNameFull.substring(0, srcFileNameFull.lastIndexOf('/'));
+		return constructNASPath(srcFilePath, srcFileName, srcFileTimestamp);
+	}
+
+	private static String constructNASPath(String srcFilePath, String srcFileName, long srcFileTimestamp) {
+		constructNASPathErrorFileExist=false;
 		String tgtFileNameFull;
 		if (tgtNASPath == null) {
 			tgtNASPath = settings.getString("prefsSMBURI", null);
@@ -257,10 +256,9 @@ public class PicSync extends IntentService{
 				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
 		}
 		String tgtFilePath = tgtNASPath;
-		String srcFileName = srcFileNameFull.substring(srcFileNameFull.lastIndexOf('/') + 1);
-		String srcFilePath = srcFileNameFull.substring(0, srcFileNameFull.lastIndexOf('/'));
 		String srcFileExtDot = srcFileName.substring(srcFileName.lastIndexOf("."));
-		String tgtFileName; //initial assumption
+		String tgtFileName;
+		String srcFileNameFull = srcFilePath + "/" + srcFileName;
 		if (prefCreatePerAlbumFolder) {
 			String albumFolderName = srcFilePath.substring(srcFilePath.lastIndexOf('/') + 1);
 			tgtFilePath = tgtFilePath + "/" + albumFolderName;
@@ -286,17 +284,24 @@ public class PicSync extends IntentService{
 			while (new SmbFile(tgtFileNameFull, auth).exists()) {
 				// detect, if it is the same file
 				if (prefTGTAlreadyExistsTest.equalsIgnoreCase("prefTGTAlreadyExistsTest_matchName")) {
-					return null;
+					constructNASPathErrorFileExist=true;
 				} else if (prefTGTAlreadyExistsTest.equalsIgnoreCase("prefTGTAlreadyExistsTest_matchNameSize")) {
+					long srcFileTS = new File(srcFileNameFull).length();
+					long tgtFileTS = new SmbFile(tgtFileNameFull,auth).length();
+/*
 					long srcFileTS = new File(srcFileNameFull).lastModified();
-					long tgtFileTS = new File(tgtFileNameFull).lastModified();
+					long tgtFileTS = new SmbFile(tgtFileNameFull).lastModified();
+*/
 					if (srcFileTS == tgtFileTS)
-						return null;
+						constructNASPathErrorFileExist=true;
 				} else if (prefTGTAlreadyExistsTest.equalsIgnoreCase("prefTGTAlreadyExistsTest_matchNameSizeCksum")) {
 					// TODO: Implement checksums
-					return null;
+					constructNASPathErrorFileExist=true;
 				}
-				// if not, make a new name
+				if (constructNASPathErrorFileExist)
+					return tgtFileNameFull;
+
+				// if file exists, but it is not the same not, make a new name
 				if (prefTGTAlreadyExistsRename.equalsIgnoreCase("prefTGTAlreadyExistsRename_currdate")) {
 					SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
 					tgtFileName = tgtFileNameBase + "." + dateFormat.format(new Date(srcFileTimestamp)) + srcFileExtDot;
@@ -356,10 +361,10 @@ public class PicSync extends IntentService{
 		MediaFilesDB.openDBRW();
 
 		broadcastLastCopiedImageTimestamp();
-		if (settings.getString("prefsSMBSRV","EMPTY").equals("EMPTY"))
+		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
 			broadcastState("Not Configured");
 		if (!prefsMACverified)
-			prefsMACverified = settings.getBoolean("prefsMACverified",false);
+			prefsMACverified = settings.getBoolean("prefsMACverified", false);
 		getAllSettings();
 		broadcastConnectionStatus();
 		startService(intent);
@@ -380,7 +385,7 @@ public class PicSync extends IntentService{
 		Log.i("PicSync", "onStartCommand: " + action);
 		super.onStartCommand(intent, flags, startId);
 		if (ACTION_STOP_SYNC.equals(action))
-			PicSyncState=ePicSyncState.PIC_SYNC_STATE_STOP;
+			PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOP;
 		myBinder = new LocalBinder();
 		return START_STICKY;
 	}
@@ -493,7 +498,7 @@ public class PicSync extends IntentService{
 		returnCIFSListIntent.putExtra("smbType", smbtype);
 		returnCIFSListIntent.putExtra("sharename", sharename);
 		returnCIFSListIntent.putExtra("exception", exception);
-		returnCIFSListIntent.putExtra("selectable", (smbtype&cifsAllowedToSelect));
+		returnCIFSListIntent.putExtra("selectable", (smbtype & cifsAllowedToSelect));
 		LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnCIFSListIntent);
 	}
 
@@ -592,7 +597,7 @@ public class PicSync extends IntentService{
 				return;
 			}
 			if (ACTION_STOP_SYNC.equals(action)) {
-				PicSyncState=ePicSyncState.PIC_SYNC_STATE_STOP;
+				PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOP;
 				handleActionStopSync();
 				return;
 			}
@@ -630,7 +635,7 @@ public class PicSync extends IntentService{
 	private String[] getStoragePaths() {
 		String canonicalPath, aPath, absolutePath;
 		/*
-        First, gather all possible "external" storage locations
+		First, gather all possible "external" storage locations
          */
 		/*final*/
 		SortedSet<String> storagePathsSet = new TreeSet<String>();
@@ -935,29 +940,13 @@ public class PicSync extends IntentService{
 		long newRowId;
 		if (mediaPaths.size() > 0)
 			broadcastState("Scanning media");
-		else
+		else {
+			broadcastState("No folders configured");
 			return 0;
+		}
 		for (String mediaPath : mediaPaths) {
-			String[] mediaFiles = listPictures(mediaPath,"TimeStampCondition");
-			for (String srcMediaFileNameFull : mediaFiles) {
-				if (MediaFilesDB.containsSrcFile(srcMediaFileNameFull))
-					continue;
-				File mediaFile = new File(srcMediaFileNameFull);
-				String srcMediaFileName = mediaFile.getName();
-				String tgtMediaFileNameFull = tgtPath + "/" + srcMediaFileName;
-				Long lastModified = mediaFile.lastModified();
-				ContentValues mediaFilePair = new ContentValues();
-				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC, srcMediaFileNameFull);
-				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TGT, tgtMediaFileNameFull);
-				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TS, lastModified);
-				mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC, 0);
-				mediaFilesScanned++;
-				try {
-					newRowId = db.insert(Constants.MediaFilesDBEntry.TABLE_NAME, null, mediaFilePair);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
+			String[] mediaFiles = listPictures(mediaPath, "TimeStampCondition");
+			MediaFilesDB.insertSrcFile(mediaFiles);
 			MediaFilesDB.getDBStatistics();
 			broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 		}
@@ -966,11 +955,11 @@ public class PicSync extends IntentService{
 
 	;
 
-	private boolean createNASPath(String smbFile){
-		String smbPath=smbFile.substring(0,smbFile.lastIndexOf("/"));
+	private boolean createNASPath(String smbFile) {
+		String smbPath = smbFile.substring(0, smbFile.lastIndexOf("/"));
 		try {
-			new SmbFile(smbPath,auth).mkdirs();
-		} catch (MalformedURLException|SmbException e) {
+			new SmbFile(smbPath, auth).mkdirs();
+		} catch (MalformedURLException | SmbException e) {
 			e.printStackTrace();
 			return false;
 		}
@@ -1001,7 +990,7 @@ public class PicSync extends IntentService{
 		}
 
 */
-		return  true;
+		return true;
 	}
 
 	private boolean copyFileToNAS(String src, String tgt, long timestamp) {
@@ -1021,7 +1010,6 @@ public class PicSync extends IntentService{
 			tgtFileTMP = new SmbFile(tgtTMP, auth);
 			tgtFile = new SmbFile(tgt, auth);
 			try {
-				boolean fileExists=tgtFile.exists();
 				tgtFile.createNewFile();
 				tgtFile.delete();
 			} catch (SmbException e) {
@@ -1082,24 +1070,20 @@ public class PicSync extends IntentService{
 		return rc;
 	}
 
-	private SmbFile resolveTGTNameConflict(SmbFile tgtFile) {
-		SmbFile newTGTFile = null;
-		String filename, name, suffix;
-		return newTGTFile;
-	}
-
 	final public void DoSyncFromDB() {
 		Cursor cToSync;
 		SQLiteDatabase db = MediaFilesDB.getWritableDatabase();
 		if (db == null)
 			return;
 		try {
-			cToSync = db.rawQuery("select " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC
-							+ "," + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT
-							+ "," + Constants.MediaFilesDBEntry.COLUMN_NAME_TS
+			cToSync = db.rawQuery("select "
+							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH
+							+ "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE
+							+ "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS
 							+ " from " + Constants.MediaFilesDBEntry.TABLE_NAME
-							+ " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + " = 0"
-							+ " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_TS + " asc "
+							+ " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
+							+ " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
+							+ " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " desc "
 					, null);
 			if (cToSync == null)
 				return;
@@ -1108,28 +1092,29 @@ public class PicSync extends IntentService{
 			return;
 		}
 		cToSync.moveToFirst();
-		int colSRC, colTGT, colTS;
-		colSRC = cToSync.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC);
-		colTGT = cToSync.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_TGT);
-		colTS = cToSync.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_TS);
+		int colSRCPATH = cToSync.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
+		int colSRCFILE = cToSync.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
+		int colSRCTS = cToSync.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS);
+
 		while (!cToSync.isAfterLast() && PicSyncState == ePicSyncState.PIC_SYNC_STATE_RUNNING) {
-			String srcFileNameFull = cToSync.getString(colSRC);
-/*
-			String tgtFileNameFull = cToSync.getString(colTGT);
-*/
-			long srcFileTimestamp = cToSync.getLong(colTS);
-			String tgtFileNameFull = constructNASPath(srcFileNameFull,srcFileTimestamp);
-			if (copyFileToNAS(srcFileNameFull, tgtFileNameFull, srcFileTimestamp)) {
-				ContentValues newvalues = new ContentValues();
-				newvalues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC, (int) 1);
-				newvalues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TGT, tgtFileNameFull);
-				String where = Constants.MediaFilesDBEntry.COLUMN_NAME_SRC + " = \"" + cToSync.getString(colSRC) + "\"";
-				db.update(Constants.MediaFilesDBEntry.TABLE_NAME, newvalues, where, null);
-				mediaFilesCountToSync--;
-				broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
+			String srcFilePath = cToSync.getString(colSRCPATH);
+			String srcFileName = cToSync.getString(colSRCFILE);
+			String srcFileNameFull = srcFilePath + "/" + srcFileName;
+			long srcFileTimestamp = cToSync.getLong(colSRCTS);
+			String tgtFileNameFull = constructNASPath(srcFilePath, srcFileName, srcFileTimestamp);
+			if (tgtFileNameFull == null)
+				continue;
+			if (!constructNASPathErrorFileExist) {
+				if (!copyFileToNAS(srcFileNameFull, tgtFileNameFull, srcFileTimestamp)) {
+					break;
+				}
 			}
 			else
-			break;
+				broadcastCopyInProgress(srcFileName, "Already there");
+
+			MediaFilesDB.updateTgtFileName(srcFilePath, srcFileName, tgtFileNameFull);
+			mediaFilesCountToSync--;
+			broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 			cToSync.moveToNext();
 		}
 		if (!cToSync.isClosed())
@@ -1191,6 +1176,7 @@ public class PicSync extends IntentService{
 
 	private void handleActionStartSync(String flags) {
 		boolean doit = false;
+		Log.d("handleActionStartSync: ","beginning");
 		if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_RUNNING)
 			doit = true;
 
@@ -1199,6 +1185,7 @@ public class PicSync extends IntentService{
 
 		if (doit) {
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_RUNNING;
+			Log.d("handleActionStartSync: ","Do it");
 
 			// TODO Prerobit na novy thread?
 			broadcastState(MyState = "PicSync running");
@@ -1209,6 +1196,7 @@ public class PicSync extends IntentService{
 			DoSync();
 */
 			broadcastConnectionStatus();
+			Log.d("handleActionStartSync: ",new Boolean(isNASConnected).toString());
 			if (!isNASConnected) {
 				try {
 					NASService.openConnection();
@@ -1220,17 +1208,18 @@ public class PicSync extends IntentService{
 				}
 			}
 			if (!isNASConnected && isWoLallowed && prefsMACverified) {
+				Log.d("handleActionStartSync: ","performing WoL");
 				NASService.WoL();
 				NASService.waitForConnection(10, 2);
 				broadcastConnectionStatus();
 			}
 			if (isNASConnected) {
 				broadcastState(MyState = "PicSync is copying files");
+				Log.d("handleActionStartSync: ","Starting sync thread");
 				DoSyncInSeparateThread.run();
 				broadcastState(MyState = "PicSync is idle");
 			} else
 				broadcastState(MyState = "PicSync failed to finish copying");
-			Log.i("PicSync", "handleActionStartSync: " + MyState);
 			broadcastState(MyState);
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
 		}
@@ -1319,7 +1308,7 @@ public class PicSync extends IntentService{
 		************************************************************************************************
 	*/
 	private static class MediaFilesDBclass extends SQLiteOpenHelper {
-		static final int DATABASE_VERSION = 1;
+		static final int DATABASE_VERSION = 7;
 		static final String DATABASE_NAME = "PicSync.db";
 		private static boolean dbOpened = false;
 		private static SQLiteDatabase db;
@@ -1328,20 +1317,21 @@ public class PicSync extends IntentService{
 			super(ctx, DATABASE_NAME, null, DATABASE_VERSION);
 		}
 
-		public boolean insertSrcFile(SQLiteDatabase dbWritable, String srcMediaFileNameFull) {
-			return insertSrcFile(srcMediaFileNameFull);
-		}
-
 		boolean insertSrcFile(String srcMediaFileNameFull) {
 			db = getWritableDatabase();
 			File mediaFile = new File(srcMediaFileNameFull);
+			String srcMediaFileName = mediaFile.getName();
+			String srcMediaFilePath = mediaFile.getParent();
+			if (containsSrcFile(srcMediaFilePath,srcMediaFileName))//prerobit na rozbitie path+name
+				return false;
 			Long lastModified = mediaFile.lastModified();
-			ContentValues mediaFilePair = new ContentValues();
-			mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC, srcMediaFileNameFull);
-			mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TS, lastModified);
-			mediaFilePair.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC, 0);
+			ContentValues newMediaFile = new ContentValues();
+			newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH, srcMediaFilePath);
+			newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE, srcMediaFileName);
+			newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS, lastModified);
+			mediaFilesScanned++;
 			try {
-				db.insert(Constants.MediaFilesDBEntry.TABLE_NAME, null, mediaFilePair);
+				db.insert(Constants.MediaFilesDBEntry.TABLE_NAME, null, newMediaFile);
 			} catch (Exception e) {
 				e.printStackTrace();
 				return false;
@@ -1349,10 +1339,32 @@ public class PicSync extends IntentService{
 			return true;
 		}
 
+		void insertSrcFile(String[] srcMediaFileNameFullList) {
+			db = getWritableDatabase();
+			for (String srcMediaFileNameFull : srcMediaFileNameFullList)
+				insertSrcFile(srcMediaFileNameFull);
+		}
+
+		void updateTgtFileName(String srcMediaFilePath, String srcMediaFileName, String tgtMediaFileNameFull){
+			//update tgtMediaFileName where  srcMediaFilePath + srcMediaFileName
+			ContentValues newvalues = new ContentValues();
+			newvalues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_TGT, tgtMediaFileNameFull);
+			String where = Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + "=\"" + srcMediaFilePath + "\""
+					+ " and "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + srcMediaFileName + "\"";
+			db.update(Constants.MediaFilesDBEntry.TABLE_NAME, newvalues, where, null);
+		}
 		boolean removeSrcFile(String srcMediaFileNameFull) {
 			db = getWritableDatabase();
+			File mediaFile = new File(srcMediaFileNameFull);
+			String srcMediaFilePath = mediaFile.getParent();
+			String srcMediaFileName = mediaFile.getName();
 			try {
-				db.delete(Constants.MediaFilesDBEntry.TABLE_NAME, Constants.MediaFilesDBEntry.COLUMN_NAME_SRC + "=\"" + srcMediaFileNameFull + "\"", null);
+				db.delete(Constants.MediaFilesDBEntry.TABLE_NAME,
+						Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + "=\"" + srcMediaFilePath + "\""
+								+ " and "
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + srcMediaFileName + "\""
+						, null);
 			} catch (Exception e) {
 				e.printStackTrace();
 				return false;
@@ -1360,14 +1372,23 @@ public class PicSync extends IntentService{
 			return true;
 		}
 
-		boolean containsSrcFile(String srcFile) {
+		boolean containsSrcFile(String srcMediaFileNameFull) {
+			File mediaFile = new File(srcMediaFileNameFull);
+			String srcMediaFilePath = mediaFile.getParent();
+			String srcMediaFileName = mediaFile.getName();
+			return containsSrcFile(srcMediaFilePath, srcMediaFileName);
+		}
+		boolean containsSrcFile(String srcMediaFilePath, String srcMediaFileName) {
 			db = getReadableDatabase();
 			Cursor cChkFile;
 			if (db == null)
-				return false;
+				return true;
 			try {
 				cChkFile = db.rawQuery("select count (*) from " + Constants.MediaFilesDBEntry.TABLE_NAME
-								+ " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC + "=\"" + srcFile + "\""
+								+ " where "
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + "=\"" + srcMediaFilePath + "\""
+								+ " and "
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + srcMediaFileName + "\""
 						, null);
 				cChkFile.moveToFirst();
 				int count = cChkFile.getInt(0);
@@ -1377,6 +1398,7 @@ public class PicSync extends IntentService{
 				e.printStackTrace();
 				return true;
 			}
+
 		}
 
 		void getDBStatistics() {
@@ -1388,29 +1410,30 @@ public class PicSync extends IntentService{
 
 			Cursor cToSync = db.rawQuery("select count (*) from "
 							+ Constants.MediaFilesDBEntry.TABLE_NAME
-							+ " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + " = 0"
+							+ " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
+							+ " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
 					, null);
 			cToSync.moveToFirst();
 			mediaFilesCountToSync = cToSync.getInt(0);
 			cToSync.close();
 
 			Cursor cHighestScannedTimestamp = db.rawQuery("select max("
-							+ Constants.MediaFilesDBEntry.COLUMN_NAME_TS + ")"
+							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + ")"
 							+ " from "
 							+ Constants.MediaFilesDBEntry.TABLE_NAME
-							+ " where "
-							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + "==1"
 					, null);
 			cHighestScannedTimestamp.moveToFirst();
 			lastScannedImageTimestamp = cHighestScannedTimestamp.getLong(0);
 			cHighestScannedTimestamp.close();
 
 			Cursor cHighestSyncedTimestamp = db.rawQuery("select max("
-							+ Constants.MediaFilesDBEntry.COLUMN_NAME_TS + ")"
+							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + ")"
 							+ " from "
 							+ Constants.MediaFilesDBEntry.TABLE_NAME
 							+ " where "
-							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + "==1"
+							+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " != \"\""
+							+ " or "
+							+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is not null"
 					, null);
 			cHighestSyncedTimestamp.moveToFirst();
 			long highestSyncedTimestamp = cHighestSyncedTimestamp.getLong(0);
@@ -1427,12 +1450,16 @@ public class PicSync extends IntentService{
 
 			db.execSQL("drop table if exists " + Constants.MediaFilesDBEntry.TABLE_NAME);
 			final String TABLE_CREATE = "create table " + Constants.MediaFilesDBEntry.TABLE_NAME + "("
-					+ Constants.MediaFilesDBEntry.TABLE_NAME + "_ID INTEGER PRIMARY KEY AUTOINCREMENT, "
-					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC + " TEXT, "
+					+ Constants.MediaFilesDBEntry.TABLE_NAME
+					+ "_ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + " TEXT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + " TEXT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_MIN_FILE + " TEXT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " INTEGER, "
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " TEXT, "
-					+ Constants.MediaFilesDBEntry.COLUMN_NAME_TS + " INTEGER, "
-					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SYNC + " INTEGER, "
-					+ "CONSTRAINT srcFile_unique UNIQUE (" + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC + ")"
+					+ "CONSTRAINT srcFile_unique UNIQUE (" + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH
+					+ "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE
+					+ "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + ")"
 					+ ")";
 			db.execSQL(TABLE_CREATE);
 
@@ -1504,7 +1531,7 @@ public class PicSync extends IntentService{
 			}
 
 			if (!prefsMACverified)
-				prefsMACverified = settings.getBoolean("prefsMACverified",false);
+				prefsMACverified = settings.getBoolean("prefsMACverified", false);
 			if (isNASConnected && !prefsMACverified) {
 				storeWoLInfo();
 			}
@@ -1518,10 +1545,10 @@ public class PicSync extends IntentService{
 			smbuser = settings.getString(MyContext.getString(R.string.pref_cifs_user), "");
 			smbpasswd = settings.getString(MyContext.getString(R.string.pref_cifs_password), "guest");
 			if (((auth == null) || SharedPreferencesChanged)) {
-				if  (!smbuser.isEmpty() && !smbuser.equals("") && !smbpasswd.isEmpty() && !smbpasswd.equals(""))
+				if (!smbuser.isEmpty() && !smbuser.equals("") && !smbpasswd.isEmpty() && !smbpasswd.equals(""))
 					auth = new NtlmPasswordAuthentication(null, smbuser, smbpasswd);
 				else
-					auth=NtlmPasswordAuthentication.ANONYMOUS;
+					auth = NtlmPasswordAuthentication.ANONYMOUS;
 /*
 				if  ((smbuser.isEmpty()) || smbuser.equals(""))
 					auth = new NtlmPasswordAuthentication(null, null, null);
@@ -1533,6 +1560,7 @@ public class PicSync extends IntentService{
 			}
 			SharedPreferencesChanged = false;
 		}
+
 		public static void openConnection() throws MalformedURLException {
 			if (!isConnectedToWifi) {
 				makeToast("Wifi is not connected");
@@ -1541,7 +1569,7 @@ public class PicSync extends IntentService{
 			smbservername = settings.getString("prefsSMBSRV", "");
 			smbshare = settings.getString(MyContext.getString(R.string.pref_cifs_share), "");
 
-			if (smbshare.equals(""))
+			if (smbshare.isEmpty())
 				smbshareurl = "smb://" + smbservername + "/";
 			else
 				smbshareurl = "smb://" + smbservername + "/" + smbshare + "/";
@@ -1599,8 +1627,9 @@ public class PicSync extends IntentService{
 			final int PORT = 9;
 
 			String ipStr = null;
-			ipStr = settings.getString("smbserverip","");;
-			String macStr = settings.getString("prefsMAC","");
+			ipStr = settings.getString("smbserverip", "");
+			;
+			String macStr = settings.getString("prefsMAC", "");
 
 			try {
 				byte[] macBytes = getMacBytes(macStr);
@@ -1623,6 +1652,7 @@ public class PicSync extends IntentService{
 				Log.d("WoL", "Failed to send Wake-on-LAN packet:" + e);
 			}
 		}
+
 		private static byte[] getMacBytes(String macStr) throws IllegalArgumentException {
 			byte[] bytes = new byte[6];
 			String[] hex = macStr.split("(\\:|\\-)");
@@ -1638,11 +1668,15 @@ public class PicSync extends IntentService{
 			}
 			return bytes;
 		}
-		private static void storeWoLInfo(){
+
+		private static void storeWoLInfo() {
 			storeWoLInfo(smbservername);
-		};
-		private static void storeWoLInfo(String servername){
-			String smbserverip,smbserverbcast;
+		}
+
+		;
+
+		private static void storeWoLInfo(String servername) {
+			String smbserverip, smbserverbcast;
 			try {
 				smbserverip = UniAddress.getByName(servername).getHostAddress();
 				final Set<String> arp = new HashSet<String>();
@@ -1655,7 +1689,7 @@ public class PicSync extends IntentService{
 						settingsEditor.putString("smbserverip", smbserverip);
 						settingsEditor.putString("prefsMAC", smbservermac);
 						settingsEditor.putBoolean("prefsMACverified", true);
-						prefsMACverified=true;
+						prefsMACverified = true;
 						settingsEditor.apply();
 						break;
 					}
@@ -1664,6 +1698,7 @@ public class PicSync extends IntentService{
 			}
 
 		}
+
 		private static void makeToast(final String toastString) {
 			h = new Handler(MyContext.getMainLooper());
 			h.post(new Runnable() {

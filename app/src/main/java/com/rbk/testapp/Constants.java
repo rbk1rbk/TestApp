@@ -14,10 +14,11 @@ public final class Constants {
 
 	public static class MediaFilesDBEntry implements BaseColumns {
 		public static final String TABLE_NAME = "MediaFiles";
-		public static final String COLUMN_NAME_SRC = "srcFile";
-		public static final String COLUMN_NAME_TGT = "tgtFile";
-		public static final String COLUMN_NAME_TS = "timestamp";
-		public static final String COLUMN_NAME_SYNC = "synced";
+		public static final String COLUMN_NAME_SRC_PATH = "srcFilePath";
+		public static final String COLUMN_NAME_SRC_FILE = "srcFileName";
+		public static final String COLUMN_NAME_MIN_FILE = "minFileName";
+		public static final String COLUMN_NAME_TGT = "tgtFileNameFull";
+		public static final String COLUMN_NAME_SRC_TS = "timestamp";
 	}
 
 
