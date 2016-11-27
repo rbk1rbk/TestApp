@@ -2,6 +2,8 @@ package com.rbk.testapp;
 
 import android.Manifest;
 import android.app.IntentService;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -18,6 +20,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.preference.PreferenceManager;
+import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.LocalBroadcastManager;
 import android.text.TextUtils;
@@ -58,8 +61,10 @@ import jcifs.smb.SmbFileOutputStream;
 import static java.lang.Thread.sleep;
 
 public class PicSync extends IntentService {
+	private static final int mId=1;
 	public static final String STATE = "State";
 	public static final String NOTIFICATION = "com.rbk.testapp.MainScreen.receiver";
+	public static final String INTENT_PARENT = "IntentParent";
 	static final String ACTION_GET_STATE = "PicSync.GetState";
 	static final String ACTION_START_SYNC = "PicSync.Start";
 	static final String ACTION_START_SYNC_FLAG = "PicSync.Start.Restart";
@@ -84,6 +89,7 @@ public class PicSync extends IntentService {
 	static String smbshareurl = null;
 	static String tgtNASPath = null;
 	static boolean isWoLallowed = false;
+	static boolean preferenceInitialized = false;
 	static NtlmPasswordAuthentication auth = null;
 	static boolean authenticated = false;
 	static boolean isNASConnected = false;
@@ -91,7 +97,7 @@ public class PicSync extends IntentService {
 	static boolean prefCreatePerAlbumFolder;
 	static Date lastCopiedImageTimestamp;
 	static long lastScannedImageTimestamp;
-	private static String MyState = "Not running";
+	private static String MyState = "Idle";
 	private static File timestampFile;
 	private static IBinder myBinder;
 	private static boolean prefsMACverified = false;
@@ -99,10 +105,10 @@ public class PicSync extends IntentService {
 	private static String fileurl;
 	private static SharedPreferences settings;
 	private static boolean SharedPreferencesChanged = true;
-	private static boolean isConnectedToWifi = false;
-	private static Integer mediaFilesCountTotal = 0;
-	private static Integer mediaFilesScanned = 0;
-	private static Integer mediaFilesCountToSync = 0;
+	private static volatile boolean isConnectedToWifi = false;
+	private static Integer mediaFilesCountTotal = -1;
+	private static Integer mediaFilesScanned = -1;
+	private static Integer mediaFilesCountToSync = -1;
 	private static MediaFilesDBclass MediaFilesDB;
 	private static volatile ePicSyncState PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
 	private static boolean constructNASPathErrorFileExist=false;
@@ -337,37 +343,6 @@ public class PicSync extends IntentService {
 	public void onCreate() {
 		super.onCreate();
 		Log.i("PicSync", "onCreate");
-		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
-			Log.i("PicSync", "No permission to READ_EXTERNAL_STORAGE");
-			PicSyncState = ePicSyncState.PIC_SYNC_STATE_NO_ACCESS;
-			MyState = "No access to external storage";
-		}
-		PreferenceManager.setDefaultValues(MyContext, R.xml.pref_upload, false);
-		settings = PreferenceManager.getDefaultSharedPreferences(this);
-		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
-		Intent intent = new Intent(this, PicSyncScheduler.class);
-		timestampFile = new File(getFilesDir(), timestampFileName);
-		try {
-			if (!timestampFile.exists()) {
-				timestampFile.createNewFile();
-				timestampFile.setLastModified(0);
-			}
-
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		lastCopiedImageTimestamp = new Date(timestampFile.lastModified());
-		MediaFilesDB = new MediaFilesDBclass(MyContext);
-		MediaFilesDB.openDBRW();
-
-		broadcastLastCopiedImageTimestamp();
-		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
-			broadcastState("Not Configured");
-		if (!prefsMACverified)
-			prefsMACverified = settings.getBoolean("prefsMACverified", false);
-		getAllSettings();
-		broadcastConnectionStatus();
-		startService(intent);
 	}
 
 	private void getAllSettings() {
@@ -384,14 +359,50 @@ public class PicSync extends IntentService {
 		final String action = intent.getAction();
 		Log.i("PicSync", "onStartCommand: " + action);
 		super.onStartCommand(intent, flags, startId);
-		if (ACTION_STOP_SYNC.equals(action))
-			PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOP;
-		myBinder = new LocalBinder();
+		if (ACTION_STOP_SYNC.equals(action)) {
+			if (PicSyncState == ePicSyncState.PIC_SYNC_STATE_RUNNING) {
+				PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOP;
+				MyState = "Sync stopped";
+				broadcastState(MyState);
+				doNotify();
+			}
+		}
 		return START_STICKY;
 	}
+	private void initPreferences() {
+		if (preferenceInitialized)
+			return;
+		preferenceInitialized = true;
+		PreferenceManager.setDefaultValues(MyContext, R.xml.pref_upload, false);
+		settings = PreferenceManager.getDefaultSharedPreferences(this);
+		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
+		getAllSettings();
+	}
+	private void initlastCopiedImageTimestamp() {
+		timestampFile = new File(getFilesDir(), timestampFileName);
+		try {
+			if (!timestampFile.exists()) {
+				timestampFile.createNewFile();
+				timestampFile.setLastModified(0);
+			}
 
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		lastCopiedImageTimestamp = new Date(timestampFile.lastModified());
+		MediaFilesDB = new MediaFilesDBclass(MyContext);
+		MediaFilesDB.openDBRW();
+
+		if (!preferenceInitialized)
+			initPreferences();
+
+		if (!prefsMACverified)
+			prefsMACverified = settings.getBoolean("prefsMACverified", false);
+	}
 	@Override
 	public IBinder onBind(Intent intent) {
+		if (myBinder == null)
+			myBinder = new LocalBinder();
 		return myBinder;
 	}
 
@@ -429,6 +440,7 @@ public class PicSync extends IntentService {
 		int smbtype = 0;
 		boolean canReadDir = true;
 		boolean exception = false;
+		initPreferences();
 		try {
 /*
 			NASService.openConnection();
@@ -551,6 +563,16 @@ public class PicSync extends IntentService {
 		});
 	}
 
+	private boolean checkStoragePermission(){
+		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
+			Log.i("PicSync", "No permission to READ_EXTERNAL_STORAGE");
+			PicSyncState = ePicSyncState.PIC_SYNC_STATE_NO_ACCESS;
+			MyState = "No access to external storage";
+			doNotify();
+			return false;
+		}
+		return true;
+	}
 	@Override
 	protected void onHandleIntent(Intent intent) {
 		if (intent != null) {
@@ -558,7 +580,10 @@ public class PicSync extends IntentService {
 			Log.i("PicSync", "onHandleIntent: " + action);
 
 			if (TextUtils.equals("PicSyncSchedulerNotification", action)) {
-				isConnectedToWifi = intent.getBooleanExtra("WifiOn", false);
+				initlastCopiedImageTimestamp();
+				Boolean wifion = intent.getBooleanExtra("WifiOn", false);
+				isConnectedToWifi = wifion;
+				Log.i("PicSync", "PicSyncSchedulerNotification: " + wifion);
 			}
 			if (ACTION_BROWSE_CIFS.equals(action)) {
 				final String path = intent.getStringExtra("path");
@@ -566,6 +591,7 @@ public class PicSync extends IntentService {
 				return;
 			}
 			if (ACTION_UPDATE_WOL.equals(action)) {
+				initPreferences();
 				NASService.storeWoLInfo(intent.getStringExtra("servername"));
 				return;
 			}
@@ -573,20 +599,28 @@ public class PicSync extends IntentService {
 				handleActionGetState();
 				return;
 			}
-			if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
-				Log.i("PicSync", "No permission to READ_EXTERNAL_STORAGE");
-				PicSyncState = ePicSyncState.PIC_SYNC_STATE_NO_ACCESS;
-				MyState = "No access to external storage";
-				return;
-			}
 			if (ACTION_START_SYNC.equals(action)) {
+				if (!checkStoragePermission())
+					return;
+				if (!isConnectedToWifi) {
+					makeToast("Wifi is not connected");
+					return;
+				}
+				initlastCopiedImageTimestamp();
 				final String flags = intent.getStringExtra(ACTION_START_SYNC_FLAG);
+				if (mediaFilesCountToSync == -1)
+					MediaFilesDB.getDBStatistics();
+				if (mediaFilesCountToSync > 0)
+					handleActionStartSync(flags);
 				scanMediaFilesToSync();
 				if (mediaFilesCountToSync > 0)
 					handleActionStartSync(flags);
 				return;
 			}
 			if (ACTION_SUGGEST_MEDIA_SCAN.equals(action)) {
+				if (!checkStoragePermission())
+					return;
+				initlastCopiedImageTimestamp();
 				final String uri = intent.getStringExtra("uri");
 				if (uri != null)
 					scanMediaFilesFromUri(uri);
@@ -596,16 +630,13 @@ public class PicSync extends IntentService {
 					handleActionStartSync("");
 				return;
 			}
-			if (ACTION_STOP_SYNC.equals(action)) {
-				PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOP;
-				handleActionStopSync();
-				return;
-			}
 			if (ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS.equals(action)) {
 				addMediaFoldersToSettings();
 				return;
 			}
 			if (ACTION_GET_STORAGE_PATHS.equals(action)) {
+				if (!checkStoragePermission())
+					return;
 				String[] storagePaths = getStoragePaths();
 				Intent returnstoragePathsIntent = new Intent("storagePaths");
 				returnstoragePathsIntent.putExtra("storagePaths", storagePaths);
@@ -616,6 +647,7 @@ public class PicSync extends IntentService {
 				broadcastConnectionStatus();
 			}
 			if (ACTION_SET_LAST_IMAGE_TIMESTAMP.equals(action)) {
+				initlastCopiedImageTimestamp();
 				long timestamp = intent.getLongExtra("lastCopiedImageTimestamp", 0);
 				if (timestamp != 0) {
 					saveLastCopiedImageTimestamp(timestamp);
@@ -805,9 +837,6 @@ public class PicSync extends IntentService {
 	}
 
 	private Set<String> listMediaFilesToSync() {
-		mediaFilesCountTotal = 0;
-		mediaFilesScanned = 0;
-		mediaFilesCountToSync = 0;
 		SmbFile tgtMediaFile;
 		Set<String> mediaPaths = settings.getStringSet("prefFolderList", null);
 		if (mediaPaths == null) {
@@ -881,6 +910,7 @@ public class PicSync extends IntentService {
 		/*TODO
 		Sort by timestamp!!!
 		 */
+		broadcastState("Scanning finished.");
 		return fileListToSync;
 	}
 
@@ -924,9 +954,6 @@ public class PicSync extends IntentService {
 	}
 
 	private int scanMediaFilesToSync() {
-		mediaFilesCountTotal = 0;
-		mediaFilesScanned = 0;
-		mediaFilesCountToSync = 0;
 		SmbFile tgtMediaFile;
 		Set<String> mediaPaths = settings.getStringSet("prefFolderList", null);
 		SQLiteDatabase db = MediaFilesDB.getWritableDatabase();
@@ -950,10 +977,9 @@ public class PicSync extends IntentService {
 			MediaFilesDB.getDBStatistics();
 			broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 		}
+		broadcastState("Scanning done");
 		return mediaFilesCountToSync;
-	}
-
-	;
+	};
 
 	private boolean createNASPath(String smbFile) {
 		String smbPath = smbFile.substring(0, smbFile.lastIndexOf("/"));
@@ -1100,6 +1126,8 @@ public class PicSync extends IntentService {
 			String srcFilePath = cToSync.getString(colSRCPATH);
 			String srcFileName = cToSync.getString(colSRCFILE);
 			String srcFileNameFull = srcFilePath + "/" + srcFileName;
+			Log.d("DoSyncFromDB",srcFileNameFull);
+
 			long srcFileTimestamp = cToSync.getLong(colSRCTS);
 			String tgtFileNameFull = constructNASPath(srcFilePath, srcFileName, srcFileTimestamp);
 			if (tgtFileNameFull == null)
@@ -1125,58 +1153,32 @@ public class PicSync extends IntentService {
 			stopSelf();
 	}
 
-	public void DoSync() {
-		Log.i("PicSync", "Sync initiated");
-		scanMediaFilesToSync();
-		Set<String> mediaFilesToSync = listMediaFilesToSync();
-		if (mediaFilesToSync != null) {
-			for (String srcMediaFileFull : mediaFilesToSync) {
-				if (!isNASConnected)
-					try {
-						NASService.openConnection();
-					} catch (MalformedURLException e) {
-						e.printStackTrace();
-						return;
-					}
-				if ((PicSyncState != ePicSyncState.PIC_SYNC_STATE_RUNNING) || (!isNASConnected))
-					return;
-				File mediaFile = new File(srcMediaFileFull);
-				String srcMediaFileName = mediaFile.getName();
-				String tgtPath = settings.getString("prefsSMBURI", null);
-				String tgtMediaFileNameFull = tgtPath + "/" + srcMediaFileName;
-				if (copyFileToNAS(srcMediaFileFull, tgtMediaFileNameFull, -1)) {
-					mediaFilesCountToSync--;
-/*
-					broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
-					broadcastCopyInProgress(srcMediaFileFull, tgtMediaFileNameFull);
-*/
-					long srcFileLastModified = new File(srcMediaFileFull).lastModified();
-					if (srcFileLastModified > lastCopiedImageTimestamp.getTime()) {
-						saveLastCopiedImageTimestamp(srcFileLastModified);
-						broadcastLastCopiedImageTimestamp();
-					}
-				}
-			}
-		}
-		broadcastState("Sync finished");
-	}
-
-	public void StopSync() {
-		PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOP;
-		Log.i("PicSync", "StopSync()");
-	}
-
 	private void handleActionGetState() {
 		Log.i("PicSync", "handleActionGetState: " + MyState);
+		initPreferences();
+		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
+			broadcastState("Not Configured");
+		initlastCopiedImageTimestamp();
+		lastCopiedImageTimestamp = new Date(timestampFile.lastModified());
+		broadcastLastCopiedImageTimestamp();
+
+		MediaFilesDB = new MediaFilesDBclass(MyContext);
+		MediaFilesDB.openDBRW();
+
+
+		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
+			broadcastState("Not Configured");
+		if (!prefsMACverified)
+			prefsMACverified = settings.getBoolean("prefsMACverified", false);
+
 		broadcastState(MyState);
 		broadcastConnectionStatus();
-		broadcastLastCopiedImageTimestamp();
 		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 	}
 
 	private void handleActionStartSync(String flags) {
 		boolean doit = false;
-		Log.d("handleActionStartSync: ","beginning");
+		Log.d("handleActionStartSync","beginning");
 		if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_RUNNING)
 			doit = true;
 
@@ -1185,10 +1187,11 @@ public class PicSync extends IntentService {
 
 		if (doit) {
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_RUNNING;
-			Log.d("handleActionStartSync: ","Do it");
+			Log.d("handleActionStartSync","Do it");
 
 			// TODO Prerobit na novy thread?
-			broadcastState(MyState = "PicSync running");
+			broadcastState(MyState = "Sync initiated");
+			doNotify();
 /*			HandlerThread thread = new HandlerThread("ServiceStartArguments", Process.THREAD_PRIORITY_BACKGROUND);
 			thread.start();
 */
@@ -1196,7 +1199,7 @@ public class PicSync extends IntentService {
 			DoSync();
 */
 			broadcastConnectionStatus();
-			Log.d("handleActionStartSync: ",new Boolean(isNASConnected).toString());
+			Log.d("handleActionStartSync","NAS Connected: "+new Boolean(isNASConnected).toString());
 			if (!isNASConnected) {
 				try {
 					NASService.openConnection();
@@ -1207,6 +1210,7 @@ public class PicSync extends IntentService {
 					return;
 				}
 			}
+			initPreferences();
 			if (!isNASConnected && isWoLallowed && prefsMACverified) {
 				Log.d("handleActionStartSync: ","performing WoL");
 				NASService.WoL();
@@ -1214,26 +1218,16 @@ public class PicSync extends IntentService {
 				broadcastConnectionStatus();
 			}
 			if (isNASConnected) {
-				broadcastState(MyState = "PicSync is copying files");
+				broadcastState(MyState = "Copying files");
+				doNotify();
 				Log.d("handleActionStartSync: ","Starting sync thread");
 				DoSyncInSeparateThread.run();
-				broadcastState(MyState = "PicSync is idle");
-			} else
-				broadcastState(MyState = "PicSync failed to finish copying");
-			broadcastState(MyState);
+				broadcastState(MyState = "In sync");
+			} else {
+				broadcastState(MyState = "Not in sync");
+			}
+			doNotify();
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
-		}
-	}
-
-	private void handleActionStopSync() {
-		if (PicSyncState == ePicSyncState.PIC_SYNC_STATE_RUNNING) {
-			PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
-
-			StopSync();
-
-			MyState = "PicSync not running";
-			Log.i("PicSync", "handleActionStopSync: " + MyState);
-			broadcastState(MyState);
 		}
 	}
 
@@ -1302,13 +1296,35 @@ public class PicSync extends IntentService {
 		}
 	}
 
+	private void doNotify(){
+		NotificationCompat.Builder mBuilder =
+				new NotificationCompat.Builder(this)
+						.setSmallIcon(R.drawable.ic_notifications_black_24dp)
+						.setContentTitle("PicSync")
+						.setContentText(MyState);
+		Intent notifyIntent = new Intent(this, MainScreen.class);
+		PendingIntent notifyPendingIntent =
+				PendingIntent.getActivity(
+						this,
+						0,
+						notifyIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT
+				);
+
+		mBuilder.setContentIntent(notifyPendingIntent);
+		NotificationManager mNotificationManager =
+				(NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+		mNotificationManager.notify(mId, mBuilder.build());
+
+	}
+
 	private enum ePicSyncState {PIC_SYNC_STATE_STOPPED, PIC_SYNC_STATE_RUNNING, PIC_SYNC_STATE_NO_ACCESS, PIC_SYNC_STATE_STOP}
 
 	/*
 		************************************************************************************************
 	*/
 	private static class MediaFilesDBclass extends SQLiteOpenHelper {
-		static final int DATABASE_VERSION = 7;
+		static final int DATABASE_VERSION = 2;
 		static final String DATABASE_NAME = "PicSync.db";
 		private static boolean dbOpened = false;
 		private static SQLiteDatabase db;
@@ -1516,7 +1532,9 @@ public class PicSync extends IntentService {
 
 		public static boolean checkConnection() {
 			if (!isConnectedToWifi) {
+/*
 				makeToast("Wifi is not connected");
+*/
 				return false;
 			}
 			isNASConnected = true;

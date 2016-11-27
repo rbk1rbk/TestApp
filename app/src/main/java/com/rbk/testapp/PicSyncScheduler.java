@@ -1,5 +1,7 @@
 package com.rbk.testapp;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -21,19 +23,31 @@ import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.util.Log;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.GregorianCalendar;
+
 public class PicSyncScheduler extends Service {
-	static private boolean onUnmeteredNetwork = false;
+	static final String INTENT_EXTRA_START_TYPE =  "StartType";
+	static final String INTENT_EXTRA_BOOTTIME = "boottime";
+	static final String INTENT_EXTRA_AFTERBOOT = "afterboot";
+	static final long AFTERBOOT_DELAY = 30*1000;
+	static final String INTENT_EXTRA_SENDER = "intentSender";
+
 	static private boolean onHomeWifi = false;
+	static private boolean onHomeWifi_Old = false;
 	static private boolean isConnected = false;
+	static private boolean isConnected_Old = false;
 	static private boolean isConnectedToWifi = false;
+	static private boolean isConnectedToWifi_Old = false;
 	static private boolean isChargingCondition = false;
 	static private boolean isCharging = false;
+	static private boolean isCharging_Old = false;
 	static private boolean chargerEventReceiverRegistered = false;
 	static private boolean changeInMediaFolders = false;
 	static private boolean isChangeInMediaFoldersRegistered = false;
 	static private int nextWakeUpTime = 0;
 	static private boolean askedToRun=false;
-	int callBack = 0;
 
 	int connType;
 	WifiManager wifiManager = null;
@@ -58,9 +72,7 @@ public class PicSyncScheduler extends Service {
 
 	Handler handler = new Handler();
 	private ContentObserver newMediaObserver = new ContentObserver(handler) {
-		/*		public newMediaObserver(Handler handler) {
-					super(handler);
-				}*/
+
 		@Override
 		public void onChange(boolean selfChange) {
 			this.onChange(selfChange, null);
@@ -95,9 +107,21 @@ public class PicSyncScheduler extends Service {
 				}
 			};
 
+	private BroadcastReceiver afterbootAlarmReceiver = new BroadcastReceiver() {
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			String action = intent.getAction();
+			Log.d("PicSyncScheduler", "afterbootAlarmReceiver: "+action);
+			if (action.equals(INTENT_EXTRA_AFTERBOOT)){
+				finishServiceInitialization();
+			}
+		}
+	};
+
 	private BroadcastReceiver chargerPluggedReceiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
+			isCharging_Old = isCharging;
 			isCharging = true;
 			Log.d("PicSyncScheduler", "Charger plugged in.");
 			evaluateTheNeedOfSync();
@@ -107,6 +131,7 @@ public class PicSyncScheduler extends Service {
 	private BroadcastReceiver chargerUnpluggedReceiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
+			isCharging_Old = isCharging;
 			isCharging = false;
 			Log.d("PicSyncScheduler", "Charger unplugged.");
 			evaluateTheNeedOfSync();
@@ -119,8 +144,10 @@ public class PicSyncScheduler extends Service {
 		public void onReceive(Context context, Intent intent) {
 			Log.d("PicSyncScheduler", "wifiChangeReceiver onReceive called");
 			checkWifiState();
-			broadcastWifiState();
-			evaluateTheNeedOfSync();
+			if (onHomeWifi != onHomeWifi_Old) {
+				broadcastWifiState();
+				evaluateTheNeedOfSync();
+			}
 }
 	};
 
@@ -148,19 +175,20 @@ public class PicSyncScheduler extends Service {
 	}
 	private void evaluateTheNeedOfSync() {
 		boolean preferencesFullfilled = (onHomeWifi && isCharging && !TextUtils.equals(prefWhenToSync, "ManualOnly"));
-		if (changeInMediaFolders && preferencesFullfilled) {
-			askToRun();
-			changeInMediaFolders = false;
+		if (onHomeWifi == onHomeWifi_Old && isCharging == isCharging_Old) {
+			Log.d("PicSyncScheduler", "There is no change on monitored conditions. evaluateTheNeedOfSync called redundantly.");
+			askedToRun=false;
+			return;
 		}
-		if (!askedToRun && preferencesFullfilled)
-			askToRun();
-		if (askedToRun && !preferencesFullfilled){
+		if (!preferencesFullfilled){
 			Log.d("PicSyncScheduler", "We should NOT start sync. If it is running, stop it.");
 			startService(new Intent(myContext, PicSync.class)
-					.setAction(PicSync.ACTION_STOP_SYNC)
+								 .setAction(PicSync.ACTION_STOP_SYNC)
 			);
 			askedToRun=false;
+			return;
 		}
+		askToRun();
 	}
 
 	public PicSyncScheduler() {
@@ -182,14 +210,17 @@ public class PicSyncScheduler extends Service {
 		if (cm == null)
 			cm = (ConnectivityManager) myContext.getSystemService(Context.CONNECTIVITY_SERVICE);
 		NetworkInfo networkInfo = cm.getActiveNetworkInfo();
+		isConnected_Old = isConnected;
 		if (networkInfo == null) {
 			isConnected = false;
 		} else {
 			isConnected = networkInfo.isConnected();
 			connType = networkInfo.getType();
 			wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+			isConnectedToWifi_Old = isConnectedToWifi;
 			if (isConnected && connType == ConnectivityManager.TYPE_WIFI) {
 				isConnectedToWifi = true;
+				onHomeWifi_Old = onHomeWifi;
 				if (getCurrentSsid().equals(prefsWifi)) {
 					onHomeWifi = true;
 					Log.d("PicSyncScheduler", "Home WiFi detected");
@@ -197,7 +228,6 @@ public class PicSyncScheduler extends Service {
 					onHomeWifi = false;
 					Log.d("PicSyncScheduler", "Other than home WiFi detected");
 				}
-				evaluateTheNeedOfSync();
 			} else
 				isConnectedToWifi = false;
 		}
@@ -220,32 +250,6 @@ public class PicSyncScheduler extends Service {
 		}
 	}
 
-	@Override
-	public void onCreate() {
-		super.onCreate();
-		getMySettings();
-
-		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
-		if (!isChangeInMediaFoldersRegistered) {
-			this.getContentResolver().
-											 registerContentObserver(
-													 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-													 true,
-													 newMediaObserver);
-			this.getContentResolver().
-											 registerContentObserver(
-													 MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-													 true,
-													 newMediaObserver);
-			isChangeInMediaFoldersRegistered = true;
-		}
-		handleSyncCondititions();
-		//Force initial rescan
-		changeInMediaFolders = true;
-		evaluateTheNeedOfSync();
-		if (!askedToRun)
-			broadcastInitialMediaScan();
-	}
 	private void registerChargerEventReceiver() {
 		if (!chargerEventReceiverRegistered) {
 			registerReceiver(chargerPluggedReceiver, new IntentFilter("android.intent.action.ACTION_POWER_CONNECTED"));
@@ -282,6 +286,76 @@ public class PicSyncScheduler extends Service {
 		}
 	}
 
+
+	public void setupReceivers(){
+		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
+		if (!isChangeInMediaFoldersRegistered) {
+			this.getContentResolver().
+											 registerContentObserver(
+													 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+													 true,
+													 newMediaObserver);
+			this.getContentResolver().
+											 registerContentObserver(
+													 MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+													 true,
+													 newMediaObserver);
+			isChangeInMediaFoldersRegistered = true;
+		}
+		handleSyncCondititions();
+	}
+	private void finishServiceInitialization(){
+		checkWifiState();
+		if (!onHomeWifi)
+			broadcastInitialMediaScan();
+		broadcastWifiState();
+		setupReceivers();
+		evaluateTheNeedOfSync();
+	}
+	public void setAfterbootInit() {
+		Long afterboot_time = new GregorianCalendar().getTimeInMillis()+AFTERBOOT_DELAY;
+		Intent afterbootIntent = new Intent(INTENT_EXTRA_AFTERBOOT);
+		AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+		alarmManager.set(AlarmManager.RTC_WAKEUP, afterboot_time, PendingIntent.getBroadcast(this, 1, afterbootIntent, PendingIntent.FLAG_UPDATE_CURRENT));
+		Log.d("PicSyncScheduler", "Afterboot tasks scheduled at " + new SimpleDateFormat("HH:mm:ss dd.MM.yyyy").format(new Date(afterboot_time)));
+	}
+	@Override
+	public int onStartCommand(Intent intent, int flags, int startId) {
+		getMySettings();
+		String bootType = intent.getStringExtra(INTENT_EXTRA_START_TYPE);
+		String intentSender = intent.getStringExtra(INTENT_EXTRA_SENDER);
+		boolean boottime = bootType != null && bootType.equals(INTENT_EXTRA_BOOTTIME);
+		boolean afterboot = bootType != null && bootType.equals(INTENT_EXTRA_AFTERBOOT);
+
+		if (intentSender == null)
+			intentSender=new String("Unknown");
+		Log.d("PicSyncScheduler","onStartCommand() " + new Integer(startId).toString() + " from "+intentSender);
+
+		if (boottime) {
+			Log.d("PicSyncScheduler", "Service started on device boot");
+			setAfterbootInit();
+			registerReceiver(afterbootAlarmReceiver, new IntentFilter(INTENT_EXTRA_AFTERBOOT));
+		} else if (startId == 1){
+			Log.d("PicSyncScheduler", "Service started by MainScreen");
+			finishServiceInitialization();
+		} else {
+			Log.d("PicSyncScheduler", "Who is calling me now?");
+		}
+		return super.onStartCommand(intent, flags, startId);
+	}
+
+	public void Schedule() {
+		if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			//TODO: Pouzi JobScheduler
+		} else {
+			//TODO: Pouzi Broadcast
+		}
+
+	}
+	@Override
+	public void onCreate() {
+		super.onCreate();
+	}
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
@@ -295,20 +369,6 @@ public class PicSyncScheduler extends Service {
 		if (isChangeInMediaFoldersRegistered)
 			this.getContentResolver().unregisterContentObserver(newMediaObserver);
 		settings.unregisterOnSharedPreferenceChangeListener(prefChangeListener);
-
-	}
-
-	@Override
-	public int onStartCommand(Intent intent, int flags, int startId) {
-		return super.onStartCommand(intent, flags, startId);
-	}
-
-	public void Schedule() {
-		if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			//TODO: Pouzi JobScheduler
-		} else {
-			//TODO: Pouzi Broadcast
-		}
 
 	}
 }

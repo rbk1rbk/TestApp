@@ -1,6 +1,7 @@
 package com.rbk.testapp;
 
 import android.Manifest;
+import android.app.ActivityManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -42,6 +43,7 @@ import java.util.GregorianCalendar;
 import java.util.Map;
 
 import static android.os.Environment.getExternalStorageDirectory;
+import static com.rbk.testapp.PicSyncScheduler.INTENT_EXTRA_SENDER;
 
 public class MainScreen extends AppCompatActivity {
 	private static final int mId=1;
@@ -62,9 +64,10 @@ public class MainScreen extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
 			final String action = intent.getAction();
-			Log.i("MainScreen", "onReceive called with " + action);
+//			Log.i("MainScreen", "onReceive called with " + action);
 			Bundle bundle = intent.getExtras();
 			String Message = bundle.getString("Message");
+			Log.i("MainScreen", "onReceive called with " + Message);
             if (bundle != null) {
                 if (Message.equals("isNASConnected")){
                     boolean isNASConnected = bundle.getBoolean("isNASConnected");
@@ -260,6 +263,17 @@ public class MainScreen extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
         }
 
+		ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+		boolean servicePicSyncSchedulerRunning = false;
+		for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+			if (PicSyncScheduler.class.getName().equals(service.service.getClassName()))
+				servicePicSyncSchedulerRunning = true;
+		}
+		if (!servicePicSyncSchedulerRunning){
+			Intent intent = new Intent(this, PicSyncScheduler.class);
+			intent.putExtra(INTENT_EXTRA_SENDER,this.getClass().getSimpleName());
+			startService(intent);
+		}
 		Log.i("MainScreen", "onCreate finished");
     }
 	protected void onStop() {
@@ -464,3 +478,16 @@ public class MainScreen extends AppCompatActivity {
 
 	}
 }
+
+/*
+	ComponentName receiver = new ComponentName(context, SampleBootReceiver.class);
+	PackageManager pm = context.getPackageManager();
+
+	pm.setComponentEnabledSetting(receiver,
+		PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+		PackageManager.DONT_KILL_APP);
+
+
+
+
+*/
