@@ -14,6 +14,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:allowBackup="true"
@@ -83,8 +84,20 @@
             android:name=".PicSyncScheduler"
             android:enabled="true"
             android:exported="false"
-            android:process=":autonomic">
+            android:process=":service">
         </service>
+
+<!--
+TODO: chcem, aby bol picsynscheduler volany vzdy pri zmene wifi, aj keby padol.
+        <receiver
+            android:name=".PicSyncScheduler.wifiChangeReceiver"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.WIFI_CHANGE"/>
+            </intent-filter>
+        </receiver>
+-->
 
         <receiver
             android:name=".StartOnBoot"

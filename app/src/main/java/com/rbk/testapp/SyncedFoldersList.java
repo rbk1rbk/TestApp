@@ -1,7 +1,6 @@
 package com.rbk.testapp;
 
 import android.app.AlertDialog;
-import android.app.ListActivity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -10,13 +9,17 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.support.design.widget.FloatingActionButton;
 import android.support.v4.content.LocalBroadcastManager;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,7 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public class SyncedFoldersList extends ListActivity {
+public class SyncedFoldersList extends AppCompatActivity {
 
 	private final Context MyContext = this;
 	private static SharedPreferences prefs;
@@ -34,6 +37,7 @@ public class SyncedFoldersList extends ListActivity {
 	private static Set<String> prefFolderList;
 	private static ProgressBar progressBar;
 	private static boolean mMessageReceiverRegistered = false;
+
 
 	private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
 		@Override
@@ -54,6 +58,7 @@ public class SyncedFoldersList extends ListActivity {
 				runOnUiThread(new Runnable() {
 					@Override
 					public void run() {
+						Toast.makeText(MyContext, "Scanning done", Toast.LENGTH_LONG).show();
 						populateList();
 					}
 				});
@@ -67,6 +72,7 @@ public class SyncedFoldersList extends ListActivity {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_synced_folders_list);
 		progressBar = (ProgressBar) findViewById(R.id.progressBar);
+		mediaFolderListView = (ListView) findViewById(R.id.syncedFolderList);
 
 		prefs = PreferenceManager.getDefaultSharedPreferences(this);
 		Intent myIntent = getIntent();
@@ -78,43 +84,12 @@ public class SyncedFoldersList extends ListActivity {
 		} else
 			populateList();
 
-
-/*
 		Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
 		setSupportActionBar(toolbar);
-*/
-
-		FloatingActionButton fabAddNewFolder = (FloatingActionButton) findViewById(R.id.fabAddNewFolder);
-		if (fabAddNewFolder != null) {
-			fabAddNewFolder.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View view) {
-					Intent intentFolderPicker = new Intent(MyContext, FolderPicker.class);
-					intentFolderPicker.setAction("android.intent.action.VIEW");
-					startActivityForResult(intentFolderPicker, 2000);
-	/*
-					Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-							.setAction("Action", null).show();
-	*/
-				}
-			});
-		}
-/*
-		getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-*/
-
-		FloatingActionButton fabDetectFolders = (FloatingActionButton) findViewById(R.id.fabDetectFolders);
-		if (fabDetectFolders != null) {
-			fabDetectFolders.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View view) {
-					callForAddMediaFoldersToSettings();
-				}
-			});
-		}
 	}
 
 	private void callForAddMediaFoldersToSettings() {
+		progressBar = (ProgressBar) findViewById(R.id.progressBar);
 		Intent intentPicSync = new Intent(this, PicSync.class);
 		if (!mMessageReceiverRegistered) {
 			LocalBroadcastManager.getInstance(getBaseContext()).registerReceiver(
@@ -122,7 +97,6 @@ public class SyncedFoldersList extends ListActivity {
 			mMessageReceiverRegistered = true;
 		}
 		intentPicSync.setAction(PicSync.ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS);
-
 		startService(intentPicSync);
 	}
 
@@ -142,9 +116,6 @@ public class SyncedFoldersList extends ListActivity {
 	}
 
 	private void populateList() {
-/*		runOnUiThread(new Runnable() {
-			@Override
-			public void run() {*/
 		progressBar.setVisibility(ProgressBar.INVISIBLE);
 		Set<String> folderListArray = prefs.getStringSet("prefFolderList",null);
 		final List folderList = new ArrayList();
@@ -153,8 +124,7 @@ public class SyncedFoldersList extends ListActivity {
 			Collections.sort(folderList);
 		}
 		final ArrayAdapter adapter = new ArrayAdapter(MyContext, android.R.layout.simple_list_item_1, android.R.id.text1, folderList);
-		setListAdapter(adapter);
-		mediaFolderListView = getListView();
+		mediaFolderListView.setAdapter(adapter);
 		mediaFolderListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
 			@Override
 			public boolean onItemLongClick(AdapterView<?> parent, View view, final int position, long id) {
@@ -181,10 +151,33 @@ public class SyncedFoldersList extends ListActivity {
 				return false;
 			}
 		});
-/*
-			}
-		});
-*/
+	}
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		getMenuInflater().inflate(R.menu.menu_synced_folders, menu);
+		return true;
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		switch (item.getItemId()) {
+			case R.id.action_add_folder:
+				Intent intentFolderPicker = new Intent(MyContext, FolderPicker.class);
+				intentFolderPicker.setAction("android.intent.action.VIEW");
+				startActivityForResult(intentFolderPicker, 2000);
+				return true;
+
+			case R.id.action_detect_folders:
+				callForAddMediaFoldersToSettings();
+				return true;
+
+			default:
+				// If we got here, the user's action was not recognized.
+				// Invoke the superclass to handle it.
+				return super.onOptionsItemSelected(item);
+
+		}
 	}
 
 	@Override

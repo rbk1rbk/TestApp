@@ -20,28 +20,6 @@
             android:background="?attr/colorPrimary"
             app:popupTheme="@style/AppTheme.NoActionBar.PopupOverlay">
 
-            <Button
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:text="Add Folder"
-                android:layout_gravity="right"
-                >
-                <!--                                <intent
-                                                    android:action="android.intent.action.VIEW"
-                                                    android:targetClass="com.rbk.testapp.FolderPicker"
-                                                    android:targetPackage="com.rbk.testapp">
-                                                </intent>-->
-                <!--
-                                <intent
-                                    android:action="android.intent.action.VIEW"
-                                    android:targetClass="com.rbk.testapp.SyncedFoldersList"
-                                    android:targetPackage="com.rbk.testapp">
-                                    <extra
-                                        android:name="action"
-                                        android:value="com.rbk.testapp.PicSync.action.addMediaFolders"/>
-                                </intent>
-                -->
-            </Button>
         </android.support.v7.widget.Toolbar>
 
     </android.support.design.widget.AppBarLayout>
@@ -57,21 +35,4 @@
 
 
     <include layout="@layout/content_synced_folders_list"/>
-
-    <android.support.design.widget.FloatingActionButton
-        android:id="@+id/fabAddNewFolder"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:src="@android:drawable/ic_input_add"/>
-
-    <android.support.design.widget.FloatingActionButton
-        android:id="@+id/fabDetectFolders"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="end"
-        app:layout_anchor="@id/fabAddNewFolder"
-        app:layout_anchorGravity="top"
-        android:src="@android:drawable/ic_input_add"/>
-
 </android.support.design.widget.CoordinatorLayout>

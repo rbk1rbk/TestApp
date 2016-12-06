@@ -351,7 +351,7 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
 					resultTime = calendar.getTimeInMillis();
 					Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
 					PicSyncIntent.setAction(PicSync.ACTION_SET_LAST_IMAGE_TIMESTAMP);
-					PicSyncIntent.putExtra("lastCopiedImageTimestamp", resultTime);
+					PicSyncIntent.putExtra("lastCopiedImageDate", resultTime);
 					MyContext.startService(PicSyncIntent);
 
 					_dialog.dismiss();
@@ -457,5 +457,11 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
 			}
 		}
 
+	}
+
+	@Override
+	protected void onDestroy() {
+		startService(new Intent(this, PicSync.class).setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN));
+		super.onDestroy();
 	}
 }

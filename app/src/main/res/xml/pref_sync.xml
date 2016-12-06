@@ -10,7 +10,7 @@
         android:title="Enable / disable sync"/>
 -->
     <ListPreference
-        android:defaultValue="-1"
+        android:defaultValue="@string/prefWhen2SyncDefault"
         android:entries="@array/pref_when2sync_titles"
         android:entryValues="@array/pref_when2sync_values"
         android:key="pref_when2sync"

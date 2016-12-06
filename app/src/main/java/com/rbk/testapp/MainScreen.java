@@ -53,7 +53,7 @@ public class MainScreen extends AppCompatActivity {
 	private static int MainScreenReceiverRegisteredCount=0;
 	private static String localPicSyncState, localTotalImages, localScannedImages, localUnsyncedImages, localNASConnectivity, localCopyFrom, localCopyTo;
 	private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
-	private final Context MyContext = this;
+	private final Context myContext = this;
 	private final int READ_EXTERNAL_STORAGE_PERMISSION_CODE = 101;
 	TextView twPicSyncState;
 	Button button;
@@ -103,7 +103,7 @@ public class MainScreen extends AppCompatActivity {
 					doNotify();
 				}
 				if (Message.equals("msgLastCopiedImageTimestamp")) {
-					localLastCopiedImageTimestamp = bundle.getLong("lastCopiedImageTimestamp");
+					localLastCopiedImageTimestamp = bundle.getLong("lastCopiedImageDate");
 					if (localLastCopiedImageTimestamp == 0)
 						((TextView) findViewById(R.id.twLastSyncedImage)).setText("Not synced yet");
 					else
@@ -160,7 +160,7 @@ public class MainScreen extends AppCompatActivity {
 			   settings.edit()
 					   .putString(getString(R.string.pref_cifs_password), smbpasswd)
 					   .apply();
-			   AlertDialog.Builder aDialog = new AlertDialog.Builder(MyContext);
+			   AlertDialog.Builder aDialog = new AlertDialog.Builder(myContext);
 			   aDialog.setMessage(resMessage + exportFile.getAbsolutePath());
 			   aDialog.setCancelable(true);
 			   aDialog.setPositiveButton("OK", new DialogInterface.OnClickListener() {
@@ -214,7 +214,7 @@ public class MainScreen extends AppCompatActivity {
 			   e.printStackTrace();
 			   resMessage = "Problem exporting settings: " + e.getMessage();
 		   } finally {
-			   AlertDialog.Builder aDialog = new AlertDialog.Builder(MyContext);
+			   AlertDialog.Builder aDialog = new AlertDialog.Builder(myContext);
 			   aDialog.setMessage(resMessage);
 			   aDialog.setCancelable(true);
 			   aDialog.setPositiveButton("OK", new DialogInterface.OnClickListener() {
@@ -257,12 +257,18 @@ public class MainScreen extends AppCompatActivity {
 
         alreadyRunning = true;
 		localCopyFrom="none";
-        DrawMainScreen();
-		doNotify();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
         }
-
+		Log.i("MainScreen", "onCreate finished");
+    }
+	protected void onStop() {
+		Log.i("MainScreen", "onStop called");
+		super.onStop();
+	}
+	protected void onStart() {
+		Log.i("MainScreen", "onStart called");
+		super.onStart();
 		ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
 		boolean servicePicSyncSchedulerRunning = false;
 		for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
@@ -274,15 +280,6 @@ public class MainScreen extends AppCompatActivity {
 			intent.putExtra(INTENT_EXTRA_SENDER,this.getClass().getSimpleName());
 			startService(intent);
 		}
-		Log.i("MainScreen", "onCreate finished");
-    }
-	protected void onStop() {
-		Log.i("MainScreen", "onStop called");
-		super.onStop();
-	}
-	protected void onStart() {
-		Log.i("MainScreen", "onStart called");
-		super.onStart();
 	}
 
 	@Override
@@ -306,6 +303,7 @@ public class MainScreen extends AppCompatActivity {
         Log.i("MainScreen","onResume called");
         super.onResume();
         DrawMainScreen();
+		doNotify();
 		if (MainScreenReceiverRegisteredCount==0) {
 			registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
 			Log.i("MainScreen", "Registering a receiver");
@@ -356,14 +354,12 @@ public class MainScreen extends AppCompatActivity {
                 return;
             }
 
-            // other 'case' lines to check for other
-            // permissions this app might request
         }
     }
 	private void showDialogSetLastRun() {
 		AlertDialog.Builder builder = new AlertDialog.Builder(this);
 		final LayoutInflater inflater = this.getLayoutInflater();
-		final View dialogView1 = View.inflate(MyContext, R.layout.dialog_date_time_picker, null);
+		final View dialogView1 = View.inflate(myContext, R.layout.dialog_date_time_picker, null);
 		builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
 			public void onClick(DialogInterface _dialog, int id) {
 				DatePicker datePicker = (DatePicker) dialogView1.findViewById(R.id.datePicker);
@@ -383,8 +379,10 @@ public class MainScreen extends AppCompatActivity {
 				resultTime = calendar.getTimeInMillis();
 				Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
 				PicSyncIntent.setAction(PicSync.ACTION_SET_LAST_IMAGE_TIMESTAMP);
-				PicSyncIntent.putExtra("lastCopiedImageTimestamp", resultTime);
-				MyContext.startService(PicSyncIntent);
+				PicSyncIntent.putExtra("lastCopiedImageDate", resultTime);
+				myContext.startService(PicSyncIntent);
+				myContext.startService(new Intent(MainScreen.this, PicSync.class)
+											   .setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN));
 
 				_dialog.dismiss();
 			}

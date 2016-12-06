@@ -16,6 +16,7 @@ public final class Constants {
 		public static final String TABLE_NAME = "MediaFiles";
 		public static final String COLUMN_NAME_SRC_PATH = "srcFilePath";
 		public static final String COLUMN_NAME_SRC_FILE = "srcFileName";
+		public static final String COLUMN_NAME_SRC_MD5 = "srcFileMD5";
 		public static final String COLUMN_NAME_MIN_FILE = "minFileName";
 		public static final String COLUMN_NAME_TGT = "tgtFileNameFull";
 		public static final String COLUMN_NAME_SRC_TS = "timestamp";

@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v4.content.LocalBroadcastManager;
@@ -15,6 +17,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 
 import java.io.File;
 import java.net.MalformedURLException;
@@ -35,7 +38,7 @@ public class CIFSbrowser extends ListActivity {
 	private final Context contextCIFS = this;
 	private Toolbar mActionBarToolbar;
 	private  ProgressBar progressBar;
-	private Button buttonChoose;
+	private Button buttonChoose, buttonCancel;
 	private boolean buttonChooseEnabled = false;
 	private static String servername = "";
 	private static String sharename = "";
@@ -90,6 +93,19 @@ public class CIFSbrowser extends ListActivity {
 	@Override
 	protected void onStart() {
 		super.onStart();
+		boolean connection = false;
+		ConnectivityManager cm = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
+		NetworkInfo networkInfo = cm.getActiveNetworkInfo();
+		if (networkInfo != null && networkInfo.isConnected())
+			if (networkInfo.getType() == ConnectivityManager.TYPE_WIFI)
+				connection = true;
+
+		if (!connection) {
+			Toast.makeText(MyContext, "Wifi Not Connected", Toast.LENGTH_LONG).show();
+			finish();
+			return;
+		}
+
 		Intent intentPicSync = new Intent(this, PicSync.class);
 		LocalBroadcastManager.getInstance(getBaseContext()).registerReceiver(
 				mMessageReceiver, new IntentFilter("CIFSList"));
@@ -113,8 +129,8 @@ public class CIFSbrowser extends ListActivity {
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_cifsbrowser);
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_cifsbrowser);
 
 /*
 		mActionBarToolbar = (Toolbar) findViewById(R.id.toolbar);
@@ -128,7 +144,7 @@ public class CIFSbrowser extends ListActivity {
 		smbshare = settings.getString("prefsTGTURI", "");
 		if (smbshare.startsWith("smb://"))
 			currDir = smbshare;
-		else if (smbservername=="")
+		else if (smbservername == "")
 			currDir = "smb://";
 		else
 			currDir = "smb://" + smbservername + "/";
@@ -137,8 +153,22 @@ public class CIFSbrowser extends ListActivity {
 */
 		progressBar = (ProgressBar) findViewById(R.id.progressBar);
 		buttonChoose = (Button) findViewById(R.id.buttonChoose);
+		buttonCancel = (Button) findViewById(R.id.buttonCancel);
+		buttonChoose.setOnClickListener(new View.OnClickListener() {
+											@Override
+											public void onClick(View view) {
+												onBtnSelectClick(view);
+											}
+										}
+		);
+		buttonCancel.setOnClickListener(new View.OnClickListener() {
+											@Override
+											public void onClick(View view) {
+												finish();
+											}
+										}
+		);
 	}
-
 	@Override
 	protected void onListItemClick(ListView l, View v, int position, long id) {
         String filename = (String) getListAdapter().getItem(position);
@@ -169,14 +199,13 @@ public class CIFSbrowser extends ListActivity {
 			} catch (MalformedURLException e) {
 				e.printStackTrace();
 			}
-			returnIntent.putExtra("servername", servername);
-			returnIntent.putExtra("sharename", sharename);
-			setResult(0, returnIntent);
+			returnIntent.putExtra("servername", servername)
+					.putExtra("sharename", sharename);
 			startService(new Intent(this, PicSync.class)
-					.putExtra("servername",servername)
 					.setAction(PicSync.ACTION_UPDATE_WOL)
 			);
 		}
+		setResult(0, returnIntent);
         finish();
     }
 }
