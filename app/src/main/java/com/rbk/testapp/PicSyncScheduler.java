@@ -15,6 +15,7 @@ import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -35,6 +36,7 @@ public class PicSyncScheduler extends Service {
 	static final String INTENT_EXTRA_START_TYPE =  "StartType";
 	static final String INTENT_EXTRA_BOOTTIME = "boottime";
 	static final String INTENT_EXTRA_AFTERBOOT = "afterboot";
+	static final String INTENT_EXTRA_PICSYNC = "afterboot";
 	static final long AFTERBOOT_DELAY = 30*1000;
 	static final String INTENT_EXTRA_SENDER = "intentSender";
 
@@ -49,9 +51,11 @@ public class PicSyncScheduler extends Service {
 	static private boolean isChargingCondition = false;
 	static private boolean isCharging = false;
 	static private boolean isCharging_Old = false;
-	static private boolean chargerEventReceiverRegistered = false;
+	static private volatile boolean chargerEventReceiverRegistered = false;
 	static private boolean changeInMediaFolders = false;
-	static private boolean isChangeInMediaFoldersRegistered = false;
+	static private volatile boolean isChangeInMediaFoldersRegistered = false;
+	private static volatile boolean wifiChangeReceiverRegistered = false;
+	private static ConnectivityManager cm;
 	static private int nextWakeUpTime = 0;
 	static private boolean askedToRun=false;
 
@@ -64,6 +68,14 @@ public class PicSyncScheduler extends Service {
 	private static String prefsWifi;
 	private static String prefWhenToSync;
 
+	static volatile String startType = null;
+	static volatile String intentSender = null;
+	static volatile boolean boottime=false;
+	static volatile boolean picSyncStart = false;
+	static IBinder binderPicSyncScheduler = null;
+	public volatile static boolean picSyncShouldBeRunning=false;
+
+
 	/*
 	* This class provides a Watchdog type of service, that calls back
 	* a sync action when user is on a home network.
@@ -73,8 +85,6 @@ public class PicSyncScheduler extends Service {
 	* it sets an alarm.
 	*
 	* */
-	private static boolean wifiChangeReceiverRegistered = false;
-	private static ConnectivityManager cm;
 
 	Handler handler = new Handler();
 	private ContentObserver newMediaObserver = new ContentObserver(handler) {
@@ -197,7 +207,10 @@ public class PicSyncScheduler extends Service {
 	private void askToRun(){
 		Log.d("PicSyncScheduler", "Requesting start sync");
 		broadcastWifiState();
-		startService(new Intent(this, PicSync.class).setAction(PicSync.ACTION_START_SYNC));
+		startService(new Intent(this, PicSync.class)
+				.setAction(PicSync.ACTION_START_SYNC)
+				.putExtra("cmdTimestamp", new Date().getTime())
+		);
 		askedToRun = true;
 	}
 	private void evaluateTheNeedOfSync() {
@@ -211,14 +224,17 @@ public class PicSyncScheduler extends Service {
 		if (!preferencesFullfilled){
 			Log.d(LOG_TAG, "We should NOT start sync. If it is running, stop it.");
 			startService(new Intent(myContext, PicSync.class)
-								 .setAction(PicSync.ACTION_STOP_SYNC)
+					.setAction(PicSync.ACTION_STOP_SYNC)
+					.putExtra("cmdTimestamp", new Date().getTime())
 			);
 			askedToRun=false;
+			picSyncShouldBeRunning=false;
 			return;
 		}
 
 		Log.d(LOG_TAG, "We passwd all checks, ask to run sync.");
 		askToRun();
+		picSyncShouldBeRunning=true;
 		if (wifiLock!=null && wifiLock.isHeld()) {
 			wifiLock.release();
 			Log.d(LOG_TAG,"WiFi wakeLock released");
@@ -228,6 +244,9 @@ public class PicSyncScheduler extends Service {
 	public PicSyncScheduler() {
 	}
 
+	public boolean getRunningRecommendation(){
+		return picSyncShouldBeRunning;
+	}
 	public String getCurrentSsid() {
 		String ssid;
 		if (isConnected && connType == ConnectivityManager.TYPE_WIFI) {
@@ -308,7 +327,8 @@ public class PicSyncScheduler extends Service {
 
 	@Override
 	public IBinder onBind(Intent intent) {
-		throw new UnsupportedOperationException("Not supported");
+		return binderPicSyncScheduler;
+//		throw new UnsupportedOperationException("Not supported");
 	}
 
 	private void handleSyncCondititions() {
@@ -361,7 +381,7 @@ public class PicSyncScheduler extends Service {
 	}
 
 
-	public void setupReceivers(){
+	private void setupReceivers(){
 		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
 		if (!isChangeInMediaFoldersRegistered) {
 			this.getContentResolver().
@@ -378,6 +398,11 @@ public class PicSyncScheduler extends Service {
 		}
 		handleSyncCondititions();
 	}
+	public class LocalBinder extends Binder {
+		PicSyncScheduler getService() {
+			return PicSyncScheduler.this;
+		}
+	}
 	private void finishServiceInitialization(){
 /*
 		verifyWifiConnection(null);
@@ -386,9 +411,11 @@ public class PicSyncScheduler extends Service {
 		broadcastWifiState();
 */
 		setupReceivers();
+		if (binderPicSyncScheduler == null)
+			binderPicSyncScheduler = new LocalBinder();
 //		evaluateTheNeedOfSync();
 	}
-	public void setAfterbootInit() {
+	private void setAfterbootInit() {
 		Long afterboot_time = new GregorianCalendar().getTimeInMillis()+AFTERBOOT_DELAY;
 		Intent afterbootIntent = new Intent(INTENT_EXTRA_AFTERBOOT);
 		AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
@@ -397,31 +424,30 @@ public class PicSyncScheduler extends Service {
 	}
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
+		getMySettings();
 		PowerManager powerManager = (PowerManager) myContext.getSystemService(POWER_SERVICE);
+		PowerManager.WakeLock wakeLock = null;
 		if (powerManager == null){
 			Log.d("StartOnBoot","PowerManager not available");
-			return super.onStartCommand(intent, flags, startId);
+		}else {
+			wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PicSyncScheduler");
+			wakeLock.acquire();
 		}
-		PowerManager.WakeLock wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"PicSyncScheduler");
-		wakeLock.acquire();
 
-		if (intent == null){
+		if (intent == null) {
 			Log.d("PicSyncScheduler", "Service started with no Intent");
-			wakeLock.release();
-			return super.onStartCommand(intent, flags, startId);
+			//start with the latest intent, we were restarted by system
+		} else {
+			startType = intent.getStringExtra(INTENT_EXTRA_START_TYPE);
+			intentSender = intent.getStringExtra(INTENT_EXTRA_SENDER);
+
+//		boolean afterboot;
+			if (startType != null) {
+				boottime = startType.equals(INTENT_EXTRA_BOOTTIME);
+//			afterboot = startType.equals(INTENT_EXTRA_AFTERBOOT);
+				picSyncStart = startType.equals(INTENT_EXTRA_PICSYNC);
+			}
 		}
-
-		getMySettings();
-		String bootType = intent.getStringExtra(INTENT_EXTRA_START_TYPE);
-		String intentSender = intent.getStringExtra(INTENT_EXTRA_SENDER);
-
-		boolean boottime=false;
-		boolean afterboot;
-		if (bootType != null) {
-			boottime = bootType.equals(INTENT_EXTRA_BOOTTIME);
-			afterboot = bootType.equals(INTENT_EXTRA_AFTERBOOT);
-		}
-
 		if (intentSender == null)
 			intentSender="Unknown";
 		Log.d("PicSyncScheduler","onStartCommand() " + new Integer(startId).toString() + " from "+intentSender);
@@ -430,14 +456,18 @@ public class PicSyncScheduler extends Service {
 			Log.d("PicSyncScheduler", "Service started on device boot");
 			setAfterbootInit();
 			registerReceiver(afterbootAlarmReceiver, new IntentFilter(INTENT_EXTRA_AFTERBOOT));
-		} else if (startId == 1){
+		} else if (startId == 1) {
 			Log.d("PicSyncScheduler", "Service started by MainScreen");
 			finishServiceInitialization();
-		} else {
+		}
+		else {
 			Log.d("PicSyncScheduler", "Who is calling me now?");
 		}
-		wakeLock.release();
-		return super.onStartCommand(intent, flags, startId);
+		if (wakeLock != null)
+			wakeLock.release();
+		return START_REDELIVER_INTENT;
+		//START_REDELIVER_INTENT
+		//START_STICKY
 	}
 
 	public void Schedule() {

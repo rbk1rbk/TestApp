@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 
 /*
@@ -38,12 +39,18 @@ public class FolderPicker extends ListActivity {
     private String path;
     private final Context MyContext = this;
 	private static boolean mMessageReceiverRegistered = false;
+	private static long cmdTimestamp=0;
 
 	private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
 			Log.d("FolderPicker onReceive",intent.getAction());
 			Bundle bundle = intent.getExtras();
+			long retCmdTimestamp = intent.getLongExtra("cmdTimestamp",0);
+			if ( retCmdTimestamp != cmdTimestamp) {
+				Log.d("FolderPicker onReceive","Received answer with different timestamp than current request");
+				return;
+			}
 			List values = new ArrayList();
 			if (bundle != null) {
 				Collections.addAll(values, bundle.getStringArray("storagePaths"));
@@ -68,6 +75,7 @@ public class FolderPicker extends ListActivity {
 			path = "";
 			Intent intentPicSync = new Intent(this, PicSync.class);
 			intentPicSync.setAction(PicSync.ACTION_GET_STORAGE_PATHS);
+			cmdTimestamp=new Date().getTime();
 			startService(intentPicSync);
 		}
 		try {

@@ -8,9 +8,11 @@
         android:title="Add Folder"
         app:showAsAction="always"/>
 
+<!--
+    android:icon="@drawable/ic_search_holo_dark"
+-->
     <item
         android:id="@+id/action_detect_folders"
-        android:icon="@drawable/ic_search_holo_dark"
         android:title="Scan For Folders"
         app:showAsAction="always"/>
 

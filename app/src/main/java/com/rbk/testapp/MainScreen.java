@@ -457,7 +457,7 @@ public class MainScreen extends AppCompatActivity {
 	private void doNotify(){
 		NotificationCompat.Builder mBuilder =
 				new NotificationCompat.Builder(this)
-						.setSmallIcon(R.drawable.ic_notifications_black_24dp)
+						.setSmallIcon(R.drawable.ic_sync_black_24dp)
 						.setContentTitle("PicSync")
 						.setContentText(localPicSyncState);
 		Intent notifyIntent = new Intent(this, MainScreen.class);
@@ -476,7 +476,6 @@ public class MainScreen extends AppCompatActivity {
 
 	}
 }
-
 /*
 	ComponentName receiver = new ComponentName(context, SampleBootReceiver.class);
 	PackageManager pm = context.getPackageManager();
@@ -484,8 +483,4 @@ public class MainScreen extends AppCompatActivity {
 	pm.setComponentEnabledSetting(receiver,
 		PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
 		PackageManager.DONT_KILL_APP);
-
-
-
-
 */

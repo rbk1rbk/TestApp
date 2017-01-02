@@ -20,6 +20,7 @@ public final class Constants {
 		public static final String COLUMN_NAME_MIN_FILE = "minFileName";
 		public static final String COLUMN_NAME_TGT = "tgtFileNameFull";
 		public static final String COLUMN_NAME_SRC_TS = "timestamp";
+		public static final String COLUMN_NAME_EXIF_HASH = "exifHash";
 	}
 
 
