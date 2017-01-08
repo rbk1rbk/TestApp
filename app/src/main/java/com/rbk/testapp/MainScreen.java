@@ -67,7 +67,7 @@ public class MainScreen extends AppCompatActivity {
 //			Log.i("MainScreen", "onReceive called with " + action);
 			Bundle bundle = intent.getExtras();
 			String Message = bundle.getString("Message");
-			Log.i("MainScreen", "onReceive called with " + Message);
+//			Log.i("MainScreen", "onReceive called with " + Message);
             if (bundle != null) {
                 if (Message.equals("isNASConnected")){
                     boolean isNASConnected = bundle.getBoolean("isNASConnected");
@@ -131,6 +131,13 @@ public class MainScreen extends AppCompatActivity {
         if (id == R.id.action_settings) {
             Intent myIntent = new Intent(this, SettingsActivity.class);
             this.startActivity(myIntent);
+            return true;
+        }
+
+        if (id == R.id.action_rescan) {
+			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
+			PicSyncIntent.setAction(PicSync.ACTION_SUGGEST_RESCAN);
+            this.startService(PicSyncIntent);
             return true;
         }
 
@@ -437,8 +444,8 @@ public class MainScreen extends AppCompatActivity {
 	public void btnStopSyncListener(View v) {
 		Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
 		PicSyncIntent.setAction(PicSync.ACTION_STOP_SYNC);
+		PicSyncIntent.putExtra("cmdTimestamp",new Date().getTime());
 		this.startService(PicSyncIntent);
-
 	}
 
 	public void btnSaveOnClickListener(View v) {
@@ -452,6 +459,7 @@ public class MainScreen extends AppCompatActivity {
 		Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
 		PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
 		PicSyncIntent.putExtra(PicSync.ACTION_START_SYNC_FLAG,PicSync.ACTION_START_SYNC_RESTART);
+		PicSyncIntent.putExtra("cmdTimestamp",new Date().getTime());
 		this.startService(PicSyncIntent);
 	}
 	private void doNotify(){

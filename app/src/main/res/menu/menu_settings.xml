@@ -7,25 +7,30 @@
         android:id="@+id/action_settings"
         android:orderInCategory="100"
         android:title="Settings"
-        app:showAsAction="never"/>
+        app:showAsAction="ifRoom"/>
+    <item
+        android:id="@+id/action_rescan"
+        android:orderInCategory="101"
+        android:title="Rescan now"
+        app:showAsAction="ifRoom"/>
     <item
         android:id="@+id/action_syncnow"
-        android:orderInCategory="101"
+        android:orderInCategory="102"
         android:title="Sync now"
         app:showAsAction="never"/>
     <item
         android:id="@+id/action_export"
-        android:orderInCategory="102"
+        android:orderInCategory="103"
         android:title="Export settings"
         app:showAsAction="never"/>
     <item
         android:id="@+id/action_import"
-        android:orderInCategory="103"
+        android:orderInCategory="104"
         android:title="Import settings"
         app:showAsAction="never"/>
     <item
         android:id="@+id/action_set_last_run"
-        android:orderInCategory="104"
+        android:orderInCategory="105"
         android:title="Change last sync time"
         app:showAsAction="never"/>
 </menu>
