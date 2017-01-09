@@ -86,7 +86,7 @@ public class PicSync extends IntentService {
 	static final String ACTION_START_SYNC_RESTART = "PicSync.Resync";
 	static final String ACTION_BROWSE_CIFS = "PicSync.BrowseCIFS";
 	static final String ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS = "PicSync.addMediaFolders";
-	static final String ACTION_GET_STORAGE_PATHS = "PicSync.getStoragePaths";
+	static final String ACTION_GET_STORAGE_PATHS = "PicSync.getAllExternalStoragePaths";
 	static final String ACTION_GET_NAS_CONNECTION = "PicSync.getNASConnection";
 	static final String ACTION_SUGGEST_MEDIA_SCAN = "PicSync.suggestMediaScan";
 	static final String ACTION_SUGGEST_RESCAN = "PicSync.suggestRescan";
@@ -103,29 +103,27 @@ public class PicSync extends IntentService {
 	static String smbshare = null;
 	static String smbshareurl = null;
 	static String tgtNASPath = null;
-	static boolean isWoLallowed = false;
+	static boolean prefWoLAllowed = false;
 	static boolean cksumEnabled = false;
+	private String cksumGlobalVariable = null;
 	static int cksumMaxBytes = 1024 * 1024;
 	MessageDigest digestMD5;
-	static boolean dryRun = false;
+	static boolean DEBUGdryRun = false;
 	static boolean preferenceInitialized = false;
 	static NtlmPasswordAuthentication auth = null;
-	static boolean authenticated = false;
-	static boolean isNASConnected = false;
+
 	static String prefTGTFolderStructure, prefsSubfolderNameFormat, prefTGTRenameOption, prefTGTAlreadyExistsTest, prefTGTAlreadyExistsRename;
 	static boolean prefEnabledWakeLockCopy;
 	static boolean prefCreatePerAlbumFolder;
 	static Date lastCopiedImageDate;
 	static long lastCopiedImageTimestamp;
-	private static String MyState = "Idle";
 	private static File timestampFile;
 	private static IBinder myBinder;
-	private static boolean prefsMACverified = false;
+	private static boolean prefMACverified = false;
 	private static Handler h;
 	private static String fileurl;
 	private static SharedPreferences settings;
 	private static boolean SharedPreferencesChanged = true;
-	private static volatile boolean isConnectedToWifi = false;
 	private static Integer mediaFilesCountTotal = -1;
 	private static Integer mediaFilesScanned = -1;
 	private static Integer mediaFilesCountToSync = -1;
@@ -140,23 +138,42 @@ public class PicSync extends IntentService {
 	static volatile long lastStartBrowseCIFSIntentTimestamp=0;
 	static volatile long lastStopBrowseCIFSIntentTimestamp=0;
 
-	private String cksumGlobalVariable = null;
+	//TODO: do preferencii
+	static volatile boolean stateCopyPaused = false;
+	static volatile String stateInternalDescription = "Idle";
+	static volatile boolean stateNASConnected = false;
+	static volatile boolean stateNASauthenticated = false;
+	static volatile boolean stateHomeWifiConnected = false;
+
+	private final Context myContext = this;
+	private final String timestampFileName = "timestampFile";
+	private final NASService nasService = new NASService(myContext);
+
+	private List listCifsBrowser;
 
 	class NASFileMetadataStruct{
-		public String filePath;
-		public Long fileSize;
-		public Long fileEXIFHash;
-		public NASFileMetadataStruct(String filePath){
-			this.filePath=filePath;
+		String fileNameFull;
+		Long fileSize;
+		Long fileEXIFHash;
+		NASFileMetadataStruct(String fileNameFull){
+			this.fileNameFull = fileNameFull;
 			this.fileSize= 0L;
 			this.fileEXIFHash=0L;
 		}
-		public NASFileMetadataStruct(String filePath,Long fileSize){
-			this.filePath=filePath;
+		NASFileMetadataStruct(String fileNameFull, Long fileSize){
+			this.fileNameFull = fileNameFull;
 			this.fileSize= fileSize;
 			this.fileEXIFHash=0L;
 		}
 	}
+	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
+			new SharedPreferences.OnSharedPreferenceChangeListener() {
+				public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
+					if (key.contains("smb") || key.contains("SMB")) {
+						SharedPreferencesChanged = true;
+					}
+				}
+			};
 
 	final FilenameFilter pictureFileFilterWithTimestamp = new FilenameFilter() {
 		@Override
@@ -189,6 +206,7 @@ public class PicSync extends IntentService {
 			return lowercase.endsWith("avi");
 		}
 	};
+
 	final FilenameFilter pictureFileFilter = new FilenameFilter() {
 		@Override
 		public boolean accept(File dir, String pathname) {
@@ -214,6 +232,7 @@ public class PicSync extends IntentService {
 			return new File(dir.getAbsolutePath() + "/" + pathname).isDirectory();
 		}
 	};
+
 	final FilenameFilter pictureFolderFilter = new FilenameFilter() {
 		@Override
 		public boolean accept(File dir, String pathname) {
@@ -228,25 +247,6 @@ public class PicSync extends IntentService {
 			return fullpath.contains("images") || fullpath.contains("dcim") || fullpath.contains("pictures") || fullpath.contains("video");
 		}
 	};
-
-	private final Context myContext = this;
-	private final String timestampFileName = "timestampFile";
-	private final NASService nasService = new NASService(myContext);
-
-	private final Runnable DoSyncInSeparateThread = new Runnable() {
-		@Override
-		public void run() {
-			DoSyncFromDB();
-		}
-	};
-	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
-			new SharedPreferences.OnSharedPreferenceChangeListener() {
-				public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-					if (key.contains("smb") || key.contains("SMB")) {
-						SharedPreferencesChanged = true;
-					}
-				}
-			};
 	SmbFileFilter browseCIFSFilter = new SmbFileFilter() {
 		@Override
 		public boolean accept(SmbFile file) {
@@ -256,8 +256,8 @@ public class PicSync extends IntentService {
 			} catch (SmbException e) {
 				e.printStackTrace();
 				if (e.toString().contains("Logon failure")) {
-					authenticated = false;
-					isNASConnected = false;
+					stateNASauthenticated = false;
+					stateNASConnected = false;
 				}
 				return false;
 			}
@@ -279,13 +279,14 @@ public class PicSync extends IntentService {
 			return isDir;
 		}
 	};
-	private List values;
-
+	private final Runnable DoSyncInSeparateThread = new Runnable() {
+		@Override
+		public void run() {
+			DoSyncFromDB();
+		}
+	};
 	public PicSync() {
 		super("PicSync");
-/*
-		nasService = new NASService();
-*/
 	}
 
 	private static String constructNASPath(String srcFileNameFull, long srcFileTimestamp) {
@@ -396,7 +397,7 @@ public class PicSync extends IntentService {
 		prefTGTAlreadyExistsTest = settings.getString("prefTGTAlreadyExistsTest", getString(R.string.prefTGTAlreadyExistsTestDefault));
 		prefTGTAlreadyExistsRename = settings.getString("prefTGTAlreadyExistsRename", getString(R.string.prefTGTAlreadyExistsRenameDefault));
 		prefCreatePerAlbumFolder = settings.getBoolean("prefCreatePerAlbumFolder", false);
-		isWoLallowed = settings.getBoolean("pref_switch_WOL", false);
+		prefWoLAllowed = settings.getBoolean("pref_switch_WOL", false);
 		prefEnabledWakeLockCopy = true;
 	}
 
@@ -410,8 +411,8 @@ public class PicSync extends IntentService {
 			if ((cmdTimestamp > lastStartSyncIntentTimestamp) && (PicSyncState == ePicSyncState.PIC_SYNC_STATE_SYNCING)) {
 				lastStopSyncIntentTimestamp = cmdTimestamp;
 				PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
-				MyState = "Sync stopped";
-				broadcastState(MyState);
+				stateInternalDescription = "Sync stopped";
+				broadcastState(stateInternalDescription);
 				doNotify();
 			}
 		}
@@ -452,8 +453,8 @@ public class PicSync extends IntentService {
 		if (!preferenceInitialized)
 			initPreferences();
 
-		if (!prefsMACverified)
-			prefsMACverified = settings.getBoolean("prefsMACverified", false);
+		if (!prefMACverified)
+			prefMACverified = settings.getBoolean("prefMACverified", false);
 	}
 	@Override
 	public IBinder onBind(Intent intent) {
@@ -486,10 +487,10 @@ public class PicSync extends IntentService {
 	}
 
 	public void BrowseCIFS(String path) {
-		if (values == null)
-			values = new ArrayList();
+		if (listCifsBrowser == null)
+			listCifsBrowser = new ArrayList();
 		else
-			values.clear();
+			listCifsBrowser.clear();
 		if (!path.endsWith(File.separator))
 			path = path + File.separator;
 		SmbFile dir;
@@ -542,11 +543,11 @@ public class PicSync extends IntentService {
 /*
 					if ((!file.startsWith(".")) && (!file.startsWith("$")) && (!file.endsWith("$")) && ((smbtype == SmbFile.TYPE_WORKGROUP) || (smbtype == SmbFile.TYPE_SERVER) || (smbtype == SmbFile.TYPE_SHARE) || (smbtype == SmbFile.TYPE_FILESYSTEM)))
 */
-					values.add(file.getName());
+					listCifsBrowser.add(file.getName());
 				}
 				int tmp = smbtype & cifsAllowedBrowsablesForUp;
 				if ((smbtype & cifsAllowedBrowsablesForUp) != 0)
-					values.add("..");
+					listCifsBrowser.add("..");
 			}
 		} catch (MalformedURLException e) {
 			e.printStackTrace();
@@ -563,9 +564,9 @@ public class PicSync extends IntentService {
 
 		}
 		broadcastConnectionStatus();
-		Collections.sort(values);
+		Collections.sort(listCifsBrowser);
 		Intent returnCIFSListIntent = new Intent("CIFSList");
-		returnCIFSListIntent.putExtra("cifsList", (String[]) values.toArray(new String[values.size()]));
+		returnCIFSListIntent.putExtra("cifsList", (String[]) listCifsBrowser.toArray(new String[listCifsBrowser.size()]));
 		returnCIFSListIntent.putExtra("smbCanonicalPath", path);
 		returnCIFSListIntent.putExtra("servername", servername);
 		returnCIFSListIntent.putExtra("smbType", smbtype);
@@ -592,8 +593,8 @@ public class PicSync extends IntentService {
 
 	private void broadcastConnectionStatus() {
 		Intent updateIntent = new Intent(NOTIFICATION);
-		updateIntent.putExtra("Message", "isNASConnected");
-		updateIntent.putExtra("isNASConnected", isNASConnected);
+		updateIntent.putExtra("Message", "stateNASConnected");
+		updateIntent.putExtra("stateNASConnected", stateNASConnected);
 		sendBroadcast(updateIntent);
 	}
 
@@ -628,7 +629,7 @@ public class PicSync extends IntentService {
 		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
 			Log.i("PicSync", "No permission to READ_EXTERNAL_STORAGE");
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_NO_ACCESS;
-			MyState = "No access to external storage";
+			stateInternalDescription = "No access to external storage";
 			doNotify();
 			return false;
 		}
@@ -663,7 +664,7 @@ public class PicSync extends IntentService {
 			if (TextUtils.equals("PicSyncSchedulerNotification", action)) {
 				initlastCopiedImageTimestamp();
 				Boolean wifion = intent.getBooleanExtra("WifiOn", false);
-				isConnectedToWifi = wifion;
+				stateHomeWifiConnected = wifion;
 				Log.d(LOG_TAG, "PicSyncSchedulerNotification: " + wifion);
 			}
 			if (ACTION_BROWSE_CIFS.equals(action)) {
@@ -690,7 +691,7 @@ public class PicSync extends IntentService {
 					return;
 				if (!checkStoragePermission())
 					return;
-				if (!isConnectedToWifi) {
+				if (!stateHomeWifiConnected) {
 					makeToast("Wifi is not connected");
 					return;
 				}
@@ -710,7 +711,6 @@ public class PicSync extends IntentService {
 				return;
 			}
 			if (ACTION_SUGGEST_RESCAN.equals(action)) {
-				scanMediaFilesToSync();
 				scanNASForSyncedFiles();
 				return;
 			}
@@ -725,7 +725,7 @@ public class PicSync extends IntentService {
 					scanMediaFilesFromUri(uri);
 				else
 					scanMediaFilesToSync();
-				if (mediaFilesCountToSync > 0 && isConnectedToWifi) {
+				if (mediaFilesCountToSync > 0 && stateHomeWifiConnected) {
 					handleActionStartSync("");
 				}
 				return;
@@ -737,7 +737,7 @@ public class PicSync extends IntentService {
 			if (ACTION_GET_STORAGE_PATHS.equals(action)) {
 				if (!checkStoragePermission())
 					return;
-				String[] storagePaths = getStoragePaths();
+				String[] storagePaths = getAllExternalStoragePaths();
 				Intent returnstoragePathsIntent = new Intent("storagePaths");
 				returnstoragePathsIntent.putExtra("storagePaths", storagePaths);
 				returnstoragePathsIntent.putExtra("cmdTimestamp", cmdTimestamp);
@@ -759,13 +759,14 @@ public class PicSync extends IntentService {
 	}
 
 	private void addMediaFoldersToSettings() {
-		String[] MediaFolderList = getMediaPaths(getStoragePaths());
+		String[] MediaFolderList = getMediaPaths(getAllExternalStoragePaths());
 		Intent returnMediaFoldersListIntent = new Intent("getMediaFoldersList");
 		returnMediaFoldersListIntent.putExtra("MediaFoldersList", MediaFolderList);
 		LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnMediaFoldersListIntent);
 	}
 
-	private String[] getStoragePaths() {
+	private String[] getAllExternalStoragePaths() {
+		final String LOG_TAG="getAllExtStgPaths";
 		String canonicalPath, aPath, absolutePath;
 		/*
 		First, gather all possible "external" storage locations
@@ -781,7 +782,7 @@ public class PicSync extends IntentService {
 					canonicalPath = TextUtils.substring(canonicalPath, 0, needle);
 					storagePathsSet.add(canonicalPath);
 				} catch (IOException e) {
-					Log.i("getStoragePaths", "externalMediaDir.getAbsolutePath()", e);
+					Log.d(LOG_TAG, "externalMediaDir.getAbsolutePath()", e);
 					e.printStackTrace();
 				}
 			}
@@ -827,7 +828,7 @@ public class PicSync extends IntentService {
 		File testFile=null;
 		for (String storagePath2Check : storagePathsSet){
 			try {
-				Log.d("getStoragePaths","Checking path "+storagePath2Check);
+				Log.d(LOG_TAG,"Checking path "+storagePath2Check);
 				String testFileName = storagePath2Check+"/storagetestfile";
 				testFile = new File(testFileName);
 				testFile.createNewFile();
@@ -997,14 +998,14 @@ public class PicSync extends IntentService {
 */
 			String[] mediaFiles = listPictures(mediaPath);
 			for (String srcMediaFileFull : mediaFiles) {
-				if (!isNASConnected)
+				if (!stateNASConnected)
 					try {
 						NASService.openConnection();
 					} catch (IOException e) {
 						e.printStackTrace();
 						return null;
 					}
-				if ((PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING) || (!isNASConnected))
+				if ((PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING) || (!stateNASConnected))
 					return null;
 				File mediaFile = new File(srcMediaFileFull);
 				String srcMediaFileName = mediaFile.getName();
@@ -1019,8 +1020,8 @@ public class PicSync extends IntentService {
 					} catch (SmbException e) {
 						e.printStackTrace();
 						if (e.toString().contains("Logon failure")) {
-							authenticated = false;
-							isNASConnected = false;
+							stateNASauthenticated = false;
+							stateNASConnected = false;
 							tgtFileExists = true;
 						}
 					} finally {
@@ -1225,7 +1226,7 @@ public class PicSync extends IntentService {
 				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
 		}
 		scanMediaFilesToSync();
-		MediaFilesDB.updateHash();
+		MediaFilesDB.updateHashOfAllFiles();
 
 		List<NASFileMetadataStruct> listOfNASFiles = listNASFilesWithSize(tgtNASPath);
 		if (listOfNASFiles == null)
@@ -1234,21 +1235,59 @@ public class PicSync extends IntentService {
 		Log.d(LOG_TAG,"Found NAS files: "+listOfNASFilesSize);
 		// Tento cyklus ide cez vsetky najdene obrazky na NASku, co je samozrejme blbost
 		// Treba to prerobit na cyklus na kontrolu podla lokalnych obrazkov
+
+		Cursor cAllFiles = MediaFilesDB.getAllFiles();
+		cAllFiles.moveToFirst();
+		int colSRCPATH = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
+		int colSRCFILE = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
+		int colSRCSIZE = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILESIZE);
+		while (!cAllFiles.isAfterLast()){
+			Long fileSizeLocal = cAllFiles.getLong(colSRCSIZE);
+			String filePathLocal=cAllFiles.getString(colSRCPATH);
+			String fileNameLocal=cAllFiles.getString(colSRCFILE);
+			String fileNameFullLocal = filePathLocal + File.separator + fileNameLocal;
+			Log.d(LOG_TAG, "Searching for remote copy of " + fileNameFullLocal + " / " + fileSizeLocal);
+			int index=0;
+			long fileSizeNAS=-1L;
+			for (fileSizeNAS = listOfNASFiles.get(index).fileSize; index < listOfNASFilesSize && fileSizeLocal != (fileSizeNAS = listOfNASFiles.get(index).fileSize); index++);
+/*
+				fileSizeNAS = listOfNASFiles.get(index).fileSize;
+				if (fileSizeLocal == fileSizeNAS)
+					break;
+			}
+*/
+			if (fileSizeLocal == fileSizeNAS) {
+				String fileNameFullRemote = listOfNASFiles.get(index).fileNameFull;
+				Log.d(LOG_TAG, "Identical files: " + fileNameFullLocal + " and " + fileNameFullRemote);
+				MediaFilesDB.updateTgtFileName(filePathLocal,fileNameLocal,fileNameFullRemote);
+			}
+			else
+				MediaFilesDB.updateTgtFileName(filePathLocal,fileNameLocal,null);
+			cAllFiles.moveToNext();
+		}
+/*
+
 		for (int index=0; index < listOfNASFilesSize; index++){
 			Long fileSizeNAS = listOfNASFiles.get(index).fileSize;
 			if (MediaFilesDB.containsSrcFileOfSize(fileSizeNAS)) {
-//				Log.d(LOG_TAG, "Some local file with size of " + fileSizeNAS + " already exists on NAS as " + listOfNASFiles.get(index).filePath);
-				String fileNASName = listOfNASFiles.get(index).filePath;
+//				Log.d(LOG_TAG, "Some local file with size of " + fileSizeNAS + " already exists on NAS as " + listOfNASFiles.get(index).fileNameFull);
+				String fileNASName = listOfNASFiles.get(index).fileNameFull;
 				String fileHashNAS=makeHashNAS(fileNASName);
 				String localFile = MediaFilesDB.getSrcFileOfSizeAndHash(fileSizeNAS, fileHashNAS);
 				if (localFile != null)
 					Log.d(LOG_TAG, "Identical files: "+ localFile +" and " + fileNASName);
 			}
+*/
 /*
 			else
 				Log.d(LOG_TAG,"No local file exists with size of "+fileSizeNAS);
-*/
+*//*
+
 		}
+
+*/
+		MediaFilesDB.getDBStatistics();
+		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 
 	}
 	private int scanMediaFilesToSync() {
@@ -1458,7 +1497,7 @@ public class PicSync extends IntentService {
 			}
 			if (!constructNASPathErrorFileExist) {
 				broadcastCopyInProgress(srcFileName, tgtFileNameFull);
-				if (!dryRun) {
+				if (!DEBUGdryRun) {
 					writeRemoteLogFile(new SimpleDateFormat("yyyMMddHHmmss").format(new Date()) + " " + tgtFileNameFull);
 					if (!copyFileToNAS(srcFileNameFull, tgtFileNameFull, srcFileTimestamp)) {
 						writeRemoteLogFile(" ERR\n");
@@ -1469,7 +1508,7 @@ public class PicSync extends IntentService {
 			} else
 				broadcastCopyInProgress(srcFileName, "Already there");
 
-			if (!dryRun) {
+			if (!DEBUGdryRun) {
 				if (cksumEnabled)
 					MediaFilesDB.updateTgtFileName(srcFilePath, srcFileName, tgtFileNameFull,null);
 				else
@@ -1498,7 +1537,7 @@ public class PicSync extends IntentService {
 	}
 
 	private void handleActionGetState() {
-		Log.i("PicSync", "handleActionGetState: " + MyState);
+		Log.i("PicSync", "handleActionGetState: " + stateInternalDescription);
 		initPreferences();
 		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
 			broadcastState("Not Configured");
@@ -1509,10 +1548,10 @@ public class PicSync extends IntentService {
 
 		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
 			broadcastState("Not Configured");
-		if (!prefsMACverified)
-			prefsMACverified = settings.getBoolean("prefsMACverified", false);
+		if (!prefMACverified)
+			prefMACverified = settings.getBoolean("prefMACverified", false);
 
-		broadcastState(MyState);
+		broadcastState(stateInternalDescription);
 		broadcastConnectionStatus();
 		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 	}
@@ -1530,11 +1569,11 @@ public class PicSync extends IntentService {
 		if (doit) {
 			Log.d(LOG_TAG,"Do it");
 
-			broadcastState(MyState = "Sync initiated");
+			broadcastState(stateInternalDescription = "Sync initiated");
 			doNotify();
 			broadcastConnectionStatus();
-			Log.d(LOG_TAG,"NAS Connected: "+new Boolean(isNASConnected).toString());
-			if (!isNASConnected) {
+			Log.d(LOG_TAG,"NAS Connected: "+new Boolean(stateNASConnected).toString());
+			if (!stateNASConnected) {
 				try {
 					NASService.openConnection();
 					NASService.waitForConnection(3, 2);
@@ -1544,26 +1583,26 @@ public class PicSync extends IntentService {
 				}
 			}
 			initPreferences();
-			if (!isNASConnected && isWoLallowed && prefsMACverified) {
+			if (!stateNASConnected && prefWoLAllowed && prefMACverified) {
 				Log.d(LOG_TAG,"performing WoL");
-				broadcastState(MyState = "Sending WoL packet");
+				broadcastState(stateInternalDescription = "Sending WoL packet");
 				NASService.WoL();
 				NASService.waitForConnection(10, 2);
 			}
-			if (!isNASConnected){
-				Log.d(LOG_TAG,"isWoLallowed: "+new Boolean(isWoLallowed).toString());
-				Log.d(LOG_TAG,"prefsMACverified: "+new Boolean(prefsMACverified).toString());
+			if (!stateNASConnected){
+				Log.d(LOG_TAG,"prefWoLAllowed: "+new Boolean(prefWoLAllowed).toString());
+				Log.d(LOG_TAG,"prefMACverified: "+new Boolean(prefMACverified).toString());
 			}
 			broadcastConnectionStatus();
-			if (isNASConnected) {
+			if (stateNASConnected) {
 				PicSyncState = ePicSyncState.PIC_SYNC_STATE_SYNCING;
-				broadcastState(MyState = "Copying files");
+				broadcastState(stateInternalDescription = "Copying files");
 				doNotify();
 				Log.d(LOG_TAG,"Starting sync thread");
 				DoSyncInSeparateThread.run();
 			} else {
-				Log.d(LOG_TAG,"NAS Connected: "+new Boolean(isNASConnected).toString());
-				broadcastState(MyState = "Not in sync");
+				Log.d(LOG_TAG,"NAS Connected: "+new Boolean(stateNASConnected).toString());
+				broadcastState(stateInternalDescription = "Not in sync");
 			}
 			doNotify();
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
@@ -1637,7 +1676,7 @@ public class PicSync extends IntentService {
 				new NotificationCompat.Builder(this)
 						.setSmallIcon(R.drawable.ic_notifications_black_24dp)
 						.setContentTitle("PicSync")
-						.setContentText(MyState);
+						.setContentText(stateInternalDescription);
 		Intent notifyIntent = new Intent(this, MainScreen.class);
 		PendingIntent notifyPendingIntent =
 				PendingIntent.getActivity(
@@ -1703,7 +1742,7 @@ public class PicSync extends IntentService {
 //			Log.d("makeHash", srcFile + " md5sum: " + md5sum);
 			return md5sum;
 		}
-		public void updateHash(){
+		public void updateHashOfAllFiles(){
 			db = getReadableDatabase();
 			Cursor cChkFile;
 			if (db == null)
@@ -1736,7 +1775,7 @@ public class PicSync extends IntentService {
 							+ " and "
 							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + cChkFile.getString(colSRCFILE) + "\"";
 					db.update(Constants.MediaFilesDBEntry.TABLE_NAME, newHashValues, where, null);
-					Log.d("updateHash", fileNameFull + " md5sum: " + md5sum);
+					Log.d("updateHashOfAllFiles", fileNameFull + " md5sum: " + md5sum);
 					cChkFile.moveToNext();
 				}
 				cChkFile.close();
@@ -1970,6 +2009,29 @@ public class PicSync extends IntentService {
 			}
 			return cToSync;
 		}
+		Cursor getAllFiles() {
+			db = getWritableDatabase();
+			Cursor cAllFiles;
+			SQLiteDatabase db = MediaFilesDB.getWritableDatabase();
+			if (db == null)
+				return null;
+			try {
+				cAllFiles = db.rawQuery("select * "
+											  + " from " + Constants.MediaFilesDBEntry.TABLE_NAME
+/*
+											  + " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
+											  + " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
+											  + " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " desc "
+*/
+						, null);
+				if (cAllFiles == null)
+					return null;
+			} catch (Exception e) {
+				e.printStackTrace();
+				return null;
+			}
+			return cAllFiles;
+		}
 		void getUnsyncedFilesCloseDB() {
 			if (--dbOpened == 0)
 				db.close();
@@ -2102,34 +2164,34 @@ public class PicSync extends IntentService {
 		}
 
 		public static boolean checkConnection() {
-			if (!isConnectedToWifi) {
+			if (!stateHomeWifiConnected) {
 /*
 				makeToast("Wifi is not connected");
 */
 				return false;
 			}
-			isNASConnected = true;
+			stateNASConnected = true;
 			try {
-				if (!authenticated)
+				if (!stateNASauthenticated)
 					openConnection();
 				String[] x = (new SmbFile("smb://" + smbservername + "/", auth)).list();
 			} catch (IOException e) {
 				e.printStackTrace();
-				isNASConnected = false;
-				authenticated = false;
+				stateNASConnected = false;
+				stateNASauthenticated = false;
 			}
 
-			if (!prefsMACverified){
-				prefsMACverified = settings.getBoolean("prefsMACverified", false);
-				if (isNASConnected)
+			if (!prefMACverified){
+				prefMACverified = settings.getBoolean("prefMACverified", false);
+				if (stateNASConnected)
 					storeWoLInfo();
 			}
 
-			return isNASConnected;
+			return stateNASConnected;
 		}
 
 		public static void setAuthentication() {
-			if ((authenticated) && (!SharedPreferencesChanged))
+			if ((stateNASauthenticated) && (!SharedPreferencesChanged))
 				return;
 			smbuser = settings.getString(MyContext.getString(R.string.pref_cifs_user), "");
 			smbpasswd = settings.getString(MyContext.getString(R.string.pref_cifs_password), "guest");
@@ -2151,7 +2213,7 @@ public class PicSync extends IntentService {
 		}
 
 		public static void openConnection() throws IOException {
-			if (!isConnectedToWifi) {
+			if (!stateHomeWifiConnected) {
 				return;
 			}
 			smbservername = settings.getString("prefsSMBSRV", "");
@@ -2162,20 +2224,20 @@ public class PicSync extends IntentService {
 			else
 				smbshareurl = "smb://" + smbservername + "/" + smbshare + "/";
 			setAuthentication();
-			isNASConnected = true;
+			stateNASConnected = true;
 			SmbFile[] domains = null;
 			SmbFile domainsFile;
 			try {
 				domainsFile = new SmbFile("smb:///", auth);
 			} catch (MalformedURLException e) {
-				isNASConnected = false;
+				stateNASConnected = false;
 				throw e;
 			}
 			try {
 				domains = domainsFile.listFiles();
-				authenticated = true;
+				stateNASauthenticated = true;
 			} catch (SmbException e) {
-				isNASConnected = false;
+				stateNASConnected = false;
 				if (e.toString().contains("Logon failure")) {
 					makeToast("Check username and password settings");
 				}
@@ -2183,7 +2245,7 @@ public class PicSync extends IntentService {
 					Log.d("openConnection",e.getMessage());
 				else
 					e.printStackTrace();
-				authenticated = false;
+				stateNASauthenticated = false;
 				throw new IOException();
 			}
 		}
@@ -2266,8 +2328,8 @@ public class PicSync extends IntentService {
 						SharedPreferences.Editor settingsEditor = settings.edit();
 						settingsEditor.putString("smbserverip", smbserverip);
 						settingsEditor.putString("prefsMAC", smbservermac);
-						settingsEditor.putBoolean("prefsMACverified", true);
-						prefsMACverified = true;
+						settingsEditor.putBoolean("prefMACverified", true);
+						prefMACverified = true;
 						settingsEditor.apply();
 						break;
 					}

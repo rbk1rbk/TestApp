@@ -69,8 +69,8 @@ public class MainScreen extends AppCompatActivity {
 			String Message = bundle.getString("Message");
 //			Log.i("MainScreen", "onReceive called with " + Message);
             if (bundle != null) {
-                if (Message.equals("isNASConnected")){
-                    boolean isNASConnected = bundle.getBoolean("isNASConnected");
+                if (Message.equals("stateNASConnected")){
+                    boolean isNASConnected = bundle.getBoolean("stateNASConnected");
                     if (isNASConnected)
 						localNASConnectivity = "Connected";
 					else
