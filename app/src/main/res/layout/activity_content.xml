@@ -12,29 +12,30 @@
                 tools:showIn="@layout/activity_main_screen">
 
     <Button
-        android:id="@+id/btnSaveSMB"
+        android:id="@+id/btnSyncNow"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignParentStart="false"
+        android:onClick="btnOnClickListener_SyncNow"
+        android:text="Sync now"
         android:layout_alignParentBottom="true"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_marginBottom="25dp"
-        android:layout_marginLeft="25dp"
-        android:layout_marginStart="25dp"
-        android:onClick="btnSaveOnClickListener"
-        android:text="Go"/>
+        android:layout_alignParentLeft="false"
+        android:minHeight="32dp"
+        android:textAllCaps="false"/>
 
     <Button
-        android:id="@+id/btnStopSync"
+        android:id="@+id/btnPause"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_alignParentEnd="false"
+        android:onClick="btnOnClickListener_Pause"
+        android:text="Pause synchronization"
         android:layout_alignParentBottom="true"
-        android:layout_alignParentEnd="true"
         android:layout_alignParentRight="true"
-        android:layout_marginEnd="25dp"
-        android:layout_marginRight="25dp"
-        android:onClick="btnStopSyncListener"
-        android:text="STOP"/>
+        android:background="@android:color/holo_green_light"
+        android:textAllCaps="false"
+        android:padding="10dp"
+        android:minHeight="32dp"/>
 
     <TableLayout
         android:layout_width="fill_parent"
@@ -71,23 +72,31 @@
         <TableRow>
 
             <TextView
+                android:id="@+id/twPicSyncCurrTaskLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="false"
+                android:layout_alignParentTop="false"
                 android:layout_column="0"
-                android:text="Total images:"/>
+                android:text="PicSync current task:"/>
 
             <TextView
-                android:id="@+id/twTotalImages"
+                android:id="@+id/twPicSyncCurrTask"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_column="1"
-                android:text="Unknown"/>
+                android:text="Unknown   "/>
         </TableRow>
 
         <TableRow>
 
             <TextView
                 android:layout_column="0"
-                android:text="Scanned images:"/>
+                android:text="Total images:"/>
 
             <TextView
-                android:id="@+id/twScannedImages"
+                android:id="@+id/twTotalImages"
                 android:layout_column="1"
                 android:text="Unknown"/>
         </TableRow>

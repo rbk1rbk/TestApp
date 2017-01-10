@@ -169,8 +169,9 @@ public class PicSync extends IntentService {
 	SharedPreferences.OnSharedPreferenceChangeListener prefChangeListener =
 			new SharedPreferences.OnSharedPreferenceChangeListener() {
 				public void onSharedPreferenceChanged(SharedPreferences prefs, String key) {
-					if (key.contains("smb") || key.contains("SMB")) {
+					if (key.contains("smb") || key.contains("SMB") || key.contains("cifs") || key.contains("CIFS")) {
 						SharedPreferencesChanged = true;
+						tgtNASPath=null;
 					}
 				}
 			};
@@ -298,7 +299,7 @@ public class PicSync extends IntentService {
 	private static String constructNASPath(String srcFilePath, String srcFileName, long srcFileTimestamp) {
 		constructNASPathErrorFileExist=false;
 		String tgtFileNameFull;
-		if (tgtNASPath == null) {
+		if (tgtNASPath == null || tgtNASPath.length()==0) {
 			tgtNASPath = settings.getString("prefsSMBURI", null);
 			if (tgtNASPath.endsWith("/"))
 				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
@@ -1371,7 +1372,7 @@ public class PicSync extends IntentService {
 		}
 		FileInputStream srcFileStream = null;
 		File srcFile = null;
-		SmbFileOutputStream tgtFileStream = null;
+		SmbFileOutputStream tgtFileStreamTMP = null;
 		SmbFile tgtFileTMP = null, tgtFile = null;
 		final byte[] buffer = new byte[256 * 1024];
 		byte [] md5sumBytes;
@@ -1397,7 +1398,7 @@ public class PicSync extends IntentService {
 						return false;
 					}
 			}
-			tgtFileStream = new SmbFileOutputStream(tgtFileTMP);
+			tgtFileStreamTMP = new SmbFileOutputStream(tgtFileTMP);
 			if (cksumEnabled)
 				initializeMD5();
 			int read = 0;
@@ -1406,8 +1407,10 @@ public class PicSync extends IntentService {
 				read_total += read;
 				if (cksumEnabled && read_total < cksumMaxBytes)
 					digestMD5.update(buffer, 0, read);
-				tgtFileStream.write(buffer, 0, read);
+				tgtFileStreamTMP.write(buffer, 0, read);
 			}
+			if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING)
+				throw new InterruptedException("InterruptedException");
 			if (cksumEnabled) {
 				md5sumBytes = digestMD5.digest();
 				for (int i=0; i < md5sumBytes.length; i++)
@@ -1420,10 +1423,27 @@ public class PicSync extends IntentService {
 			if (srcFileSize != read_total)
 				rc = false;
 			sleep(1);
-		} catch (InterruptedException|MalformedURLException|SmbException|UnknownHostException e) {
+		} catch (MalformedURLException|SmbException|UnknownHostException e) {
 			e.printStackTrace();
 			rc = false;
-		} catch (FileNotFoundException e) {
+		} catch (InterruptedException e){
+			e.printStackTrace();
+			if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING){
+				try {
+					if (tgtFileStreamTMP != null) {
+						tgtFileStreamTMP.close();
+						tgtFileStreamTMP = null;
+					}
+					tgtFileTMP.delete();
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+				tgtFileTMP=null;
+			}
+
+			rc = false;
+		}
+		catch (FileNotFoundException e) {
 			e.printStackTrace();
 			if (e.toString().contains("ENOENT"))
 				MediaFilesDB.removeSrcFile(src);
@@ -1435,8 +1455,8 @@ public class PicSync extends IntentService {
 			try {
 				if (srcFileStream != null)
 					srcFileStream.close();
-				if (tgtFileStream != null)
-					tgtFileStream.close();
+				if (tgtFileStreamTMP != null)
+					tgtFileStreamTMP.close();
 				if (tgtFileTMP != null) {
 					tgtFileTMP.setLastModified(timestamp);
 					tgtFileTMP.renameTo(new SmbFile(tgt, auth));

@@ -416,7 +416,7 @@ public class MainScreen extends AppCompatActivity {
 		dialog.show();
 	}
 	protected void DrawMainScreen(){
-		button = (Button) findViewById(R.id.btnSaveSMB);
+		button = (Button) findViewById(R.id.btnSyncNow);
 
 		((TextView) findViewById(R.id.twPicSyncState)).setText(localPicSyncState);
 		((TextView) findViewById(R.id.twTotalImages)).setText(localTotalImages);
@@ -441,14 +441,14 @@ public class MainScreen extends AppCompatActivity {
 
 	};
 
-	public void btnStopSyncListener(View v) {
+	public void btnOnClickListener_Pause(View v) {
 		Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
 		PicSyncIntent.setAction(PicSync.ACTION_STOP_SYNC);
 		PicSyncIntent.putExtra("cmdTimestamp",new Date().getTime());
 		this.startService(PicSyncIntent);
 	}
 
-	public void btnSaveOnClickListener(View v) {
+	public void btnOnClickListener_SyncNow(View v) {
 		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
 			ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
 		} else
