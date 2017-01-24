@@ -113,7 +113,9 @@ public class PicSyncScheduler extends Service {
 						handleChargingConditions();
 					}
 					if (TextUtils.equals(key, "pref_homewifissid")) {
+/*
 						wifiChangeReceiver.onReceive(myContext, new Intent("android.net.conn.CONNECTIVITY_CHANGE"));
+*/
 					}
 					if (TextUtils.equals(key, "pref_when2sync")) {
 						handleSyncCondititions();
@@ -153,6 +155,7 @@ public class PicSyncScheduler extends Service {
 			evaluateTheNeedOfSync();
 		}
 	};
+/*
 
 	private BroadcastReceiver wifiChangeReceiver = new BroadcastReceiver() {
 
@@ -173,6 +176,7 @@ public class PicSyncScheduler extends Service {
 			}
 }
 	};
+*/
 	public static void dumpIntent(Intent i){
 		final String LOG_TAG="dumpIntent";
 		Bundle bundle = i.getExtras();
@@ -232,7 +236,7 @@ public class PicSyncScheduler extends Service {
 			return;
 		}
 
-		Log.d(LOG_TAG, "We passwd all checks, ask to run sync.");
+		Log.d(LOG_TAG, "We passed all checks, ask to run sync.");
 		askToRun();
 		picSyncShouldBeRunning=true;
 		if (wifiLock!=null && wifiLock.isHeld()) {
@@ -333,6 +337,7 @@ public class PicSyncScheduler extends Service {
 
 	private void handleSyncCondititions() {
 		if (!TextUtils.equals(prefWhenToSync, "ManualOnly")) {
+/*
 			if (!wifiChangeReceiverRegistered) {
 				registerReceiver(wifiChangeReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
 				registerReceiver(wifiChangeReceiver, new IntentFilter("android.net.wifi.WIFI_STATE_CHANGED"));
@@ -340,6 +345,7 @@ public class PicSyncScheduler extends Service {
 				Log.d("PicSyncScheduler", "wifiChangeReceiver registered");
 				wifiChangeReceiver.onReceive(myContext,new Intent());
 			}
+*/
 			handleChargingConditions();
 		}
 	}
@@ -460,7 +466,18 @@ public class PicSyncScheduler extends Service {
 			Log.d("PicSyncScheduler", "Service started by MainScreen");
 			finishServiceInitialization();
 		}
-		else {
+		if (intentSender.equals("WifiChangeReceiver")){
+			dumpIntent(intent);
+			verifyWifiConnection(intent);
+			Log.d("wifiChangeReceiver", "onHomeWifi: " + Boolean.toString(onHomeWifi) + ",onHomeWifi_Old: " + Boolean.toString(onHomeWifi_Old));
+			if (onHomeWifi != onHomeWifi_Old || isConnected != isConnected_Old) {
+				broadcastWifiState();
+				evaluateTheNeedOfSync();
+				onHomeWifi_Old=onHomeWifi;
+				isConnected_Old=isConnected;
+			}
+
+		} else {
 			Log.d("PicSyncScheduler", "Who is calling me now?");
 		}
 		if (wakeLock != null)
@@ -486,7 +503,9 @@ public class PicSyncScheduler extends Service {
 	public void onDestroy() {
 		super.onDestroy();
 		if (wifiChangeReceiverRegistered) {
+/*
 			unregisterReceiver(wifiChangeReceiver);
+*/
 			wifiChangeReceiverRegistered = false;
 		}
 		if (chargerEventReceiverRegistered) {

@@ -9,9 +9,9 @@
         android:title="Settings"
         app:showAsAction="ifRoom"/>
     <item
-        android:id="@+id/action_rescan"
+        android:id="@+id/action_rescanNAS"
         android:orderInCategory="101"
-        android:title="Rescan now"
+        android:title="Rescan NAS"
         app:showAsAction="ifRoom"/>
     <item
         android:id="@+id/action_syncnow"

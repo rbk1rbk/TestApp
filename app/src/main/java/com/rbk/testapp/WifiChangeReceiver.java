@@ -6,6 +6,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.IBinder;
+import android.util.Log;
+
+import static com.rbk.testapp.PicSyncScheduler.INTENT_EXTRA_SENDER;
 
 public class WifiChangeReceiver extends BroadcastReceiver {
 	private static boolean queueTrigger=false;
@@ -34,6 +37,14 @@ public class WifiChangeReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
+		Log.d("WifiChangeReceiver", "onReceive called");
+
+		context.startService(new Intent(context,PicSyncScheduler.class)
+				.setAction(intent.getAction())
+				.putExtras(intent)
+				.putExtra(INTENT_EXTRA_SENDER,this.getClass().getSimpleName())
+		);
+/*
 		if (!WifiWatchdogServiceBound) {
 			queueTrigger = true;
 			Intent wifiWatchdogServiceIntent = new Intent(context, WifiWatchdogService.class);
@@ -43,5 +54,6 @@ public class WifiChangeReceiver extends BroadcastReceiver {
 			queueTrigger=false;
 			wifiWatchdogServiceGW.wifiChangeTrigger();
 		}
+*/
     }
 }

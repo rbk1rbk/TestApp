@@ -18,7 +18,7 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_sync_black_24dp"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/AppTheme.NoActionBar">
@@ -87,17 +87,16 @@
             android:process=":service">
         </service>
 
-<!--
-TODO: chcem, aby bol picsynscheduler volany vzdy pri zmene wifi, aj keby padol.
         <receiver
-            android:name=".PicSyncScheduler.wifiChangeReceiver"
-            android:enabled="false"
+            android:name=".WifiChangeReceiver"
+            android:enabled="true"
             android:exported="false">
             <intent-filter>
+                <action android:name="android.intent.WIFI_STATE_CHANGE"/>
                 <action android:name="android.intent.WIFI_CHANGE"/>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE"/>
             </intent-filter>
         </receiver>
--->
 
         <receiver
             android:name=".StartOnBoot"

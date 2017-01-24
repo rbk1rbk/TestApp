@@ -76,22 +76,14 @@ import static java.lang.Thread.sleep;
 
 public class PicSync extends IntentService {
 	private static final int mId=1;
-	public static final String STATE = "State";
 	public static final String NOTIFICATION = "com.rbk.testapp.MainScreen.receiver";
-	public static final String INTENT_PARENT = "IntentParent";
-	static final String ACTION_GET_STATE = "PicSync.GetState";
-	static final String ACTION_START_SYNC = "PicSync.Start";
-	static final String ACTION_START_SYNC_FLAG = "PicSync.Start.Restart";
-	static final String ACTION_STOP_SYNC = "PicSync.Stop";
-	static final String ACTION_START_SYNC_RESTART = "PicSync.Resync";
-	static final String ACTION_BROWSE_CIFS = "PicSync.BrowseCIFS";
+//	public static final String INTENT_PARENT = "IntentParent";
 	static final String ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS = "PicSync.addMediaFolders";
 	static final String ACTION_GET_STORAGE_PATHS = "PicSync.getAllExternalStoragePaths";
 	static final String ACTION_GET_NAS_CONNECTION = "PicSync.getNASConnection";
-	static final String ACTION_SUGGEST_MEDIA_SCAN = "PicSync.suggestMediaScan";
-	static final String ACTION_SUGGEST_RESCAN = "PicSync.suggestRescan";
 	static final String ACTION_SET_LAST_IMAGE_TIMESTAMP = "PicSync.setLastImageTimestamp";
 	static final String ACTION_UPDATE_WOL = "PicSync.updateWOL";
+
 	static final int cifsAllowedBrowsables = SmbFile.TYPE_WORKGROUP | SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
 	static final int cifsAllowedBrowsablesForUp = SmbFile.TYPE_SERVER | SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
 	static final int cifsAllowedToSelect = SmbFile.TYPE_SHARE | SmbFile.TYPE_FILESYSTEM;
@@ -130,17 +122,34 @@ public class PicSync extends IntentService {
 	private static PicSync.MediaFilesDB MediaFilesDB;
 	private static volatile ePicSyncState PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
 	private static boolean constructNASPathErrorFileExist=false;
-	private static PicSyncScheduler picSyncSchedulerService;
-	private static boolean servicePicSyncSchedulerServiceBound = false;
+//	private static PicSyncScheduler picSyncSchedulerService;
+//	private static boolean servicePicSyncSchedulerServiceBound = false;
 
+	static final String ACTION_START_SYNC = "PicSync.Start";
+	static final String ACTION_START_SYNC_FLAG = "PicSync.Start.Restart";
+	static final String ACTION_START_SYNC_RESTART = "PicSync.Resync";
 	static volatile long lastStartSyncIntentTimestamp=0;
+	static final String ACTION_STOP_SYNC = "PicSync.Stop";
 	static volatile long lastStopSyncIntentTimestamp=0;
+	static volatile long lastStartStopSyncIntentTimestamp=0;
+
+	static final String ACTION_BROWSE_CIFS = "PicSync.BrowseCIFS";
 	static volatile long lastStartBrowseCIFSIntentTimestamp=0;
+
 	static volatile long lastStopBrowseCIFSIntentTimestamp=0;
 
-	//TODO: do preferencii
+	static final String ACTION_SUGGEST_MEDIA_SCAN = "PicSync.suggestMediaScan";
+	static final String ACTION_RESCAN_NAS_FILES = "PicSync.suggestRescan";
+	static volatile long lastMediaScanIntentTimestamp=0;
+
+	static final String ACTION_COPY_PAUSE_CHANGED = "PicSync.CopyPauseChanged";
+	static volatile long lastCopyPauseChangedIntentTimestamp=0;
 	static volatile boolean stateCopyPaused = false;
-	static volatile String stateInternalDescription = "Idle";
+
+	public static final String PICSYNC_CURRTASK = "PicSync.CurTask";
+	public static final String ACTION_GET_CURRTASK = "PicSync.GetCurrTask";
+	static volatile String stateCurrTaskDescription = "Idle";
+
 	static volatile boolean stateNASConnected = false;
 	static volatile boolean stateNASauthenticated = false;
 	static volatile boolean stateHomeWifiConnected = false;
@@ -398,6 +407,8 @@ public class PicSync extends IntentService {
 		prefTGTAlreadyExistsTest = settings.getString("prefTGTAlreadyExistsTest", getString(R.string.prefTGTAlreadyExistsTestDefault));
 		prefTGTAlreadyExistsRename = settings.getString("prefTGTAlreadyExistsRename", getString(R.string.prefTGTAlreadyExistsRenameDefault));
 		prefCreatePerAlbumFolder = settings.getBoolean("prefCreatePerAlbumFolder", false);
+		stateCopyPaused = settings.getBoolean("statePicSyncCopyPaused", true);
+
 		prefWoLAllowed = settings.getBoolean("pref_switch_WOL", false);
 		prefEnabledWakeLockCopy = true;
 	}
@@ -407,15 +418,30 @@ public class PicSync extends IntentService {
 			return START_NOT_STICKY;
 		final String action = intent.getAction();
 		Log.i("PicSync", "onStartCommand: " + action);
+
+		long cmdTimestamp=intent.getLongExtra("cmdTimestamp",0);
+		if (cmdTimestamp == 0)
+			cmdTimestamp=new Date().getTime();
+
+		if (ACTION_START_SYNC.equals(action)) {
+			if (lastStartStopSyncIntentTimestamp < cmdTimestamp)
+				lastStartStopSyncIntentTimestamp = cmdTimestamp;
+		}
+
 		if (ACTION_STOP_SYNC.equals(action)) {
-			final long cmdTimestamp=intent.getLongExtra("cmdTimestamp",0);
-			if ((cmdTimestamp > lastStartSyncIntentTimestamp) && (PicSyncState == ePicSyncState.PIC_SYNC_STATE_SYNCING)) {
+			if (lastStartStopSyncIntentTimestamp < cmdTimestamp)
+				lastStartStopSyncIntentTimestamp = cmdTimestamp;
+			if (lastStartSyncIntentTimestamp < cmdTimestamp)
 				lastStopSyncIntentTimestamp = cmdTimestamp;
+			if (PicSyncState == ePicSyncState.PIC_SYNC_STATE_SYNCING) {
 				PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
-				stateInternalDescription = "Sync stopped";
-				broadcastState(stateInternalDescription);
+				broadcastCurrTask(stateCurrTaskDescription = "Sync stopped");
 				doNotify();
 			}
+		}
+		if (ACTION_COPY_PAUSE_CHANGED.equals(action)) {
+			lastCopyPauseChangedIntentTimestamp=cmdTimestamp;
+			stateCopyPaused=settings.getBoolean("statePicSyncCopyPaused", true);
 		}
 		super.onStartCommand(intent, flags, startId);
 /*
@@ -577,10 +603,10 @@ public class PicSync extends IntentService {
 		LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnCIFSListIntent);
 	}
 
-	private void broadcastState(String State2Send) {
+	private void broadcastCurrTask(String currTask) {
 		Intent intent = new Intent(NOTIFICATION);
-		intent.putExtra("Message", "msgState");
-		intent.putExtra(STATE, State2Send);
+		intent.putExtra("Message", PICSYNC_CURRTASK);
+		intent.putExtra(PICSYNC_CURRTASK, currTask);
 		sendBroadcast(intent);
 	}
 
@@ -630,7 +656,7 @@ public class PicSync extends IntentService {
 		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
 			Log.i("PicSync", "No permission to READ_EXTERNAL_STORAGE");
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_NO_ACCESS;
-			stateInternalDescription = "No access to external storage";
+			broadcastCurrTask(stateCurrTaskDescription = "No access to external storage");
 			doNotify();
 			return false;
 		}
@@ -678,18 +704,22 @@ public class PicSync extends IntentService {
 				NASService.storeWoLInfo(intent.getStringExtra("servername"));
 				return;
 			}
-			if (ACTION_GET_STATE.equals(action)) {
-				handleActionGetState();
+			if (ACTION_GET_CURRTASK.equals(action)) {
+				handleActionGetCurrTask();
 				return;
 			}
 			if (ACTION_START_SYNC.equals(action)) {
-				//Verify, it is a current intent, not an old one
-				if (cmdTimestamp < lastStopSyncIntentTimestamp)
+				//Verify, it is the last of intermediate start/stop commands
+				if (cmdTimestamp < lastStartStopSyncIntentTimestamp)
 					return;
-				lastStartSyncIntentTimestamp = cmdTimestamp;
-
 				if (PicSyncState == ePicSyncState.PIC_SYNC_STATE_SYNCING)
 					return;
+				initPreferences();
+				stateCopyPaused=settings.getBoolean("statePicSyncCopyPaused", true);
+				if (stateCopyPaused) {
+					makeToast("Syncing is paused");
+					return;
+				}
 				if (!checkStoragePermission())
 					return;
 				if (!stateHomeWifiConnected) {
@@ -709,10 +739,11 @@ public class PicSync extends IntentService {
 						handleActionStartSync(flags);
 				}
 				PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
+				broadcastCurrTask(stateCurrTaskDescription="Idle");
 				return;
 			}
-			if (ACTION_SUGGEST_RESCAN.equals(action)) {
-				scanNASForSyncedFiles();
+			if (ACTION_RESCAN_NAS_FILES.equals(action)) {
+				scanCIFSFiles();
 				return;
 			}
 			if (ACTION_SUGGEST_MEDIA_SCAN.equals(action)) {
@@ -990,7 +1021,7 @@ public class PicSync extends IntentService {
 
 		String tgtPath = settings.getString("prefsSMBURI", null);
 		if (mediaPaths.size() > 0)
-			broadcastState("Scanning media");
+			broadcastCurrTask("Scanning media");
 		else
 			return null;
 		for (String mediaPath : mediaPaths) {
@@ -1032,7 +1063,7 @@ public class PicSync extends IntentService {
 				} catch (MalformedURLException e) {
 					e.printStackTrace();
 					PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
-					broadcastState("NAS error");
+					broadcastCurrTask("NAS error");
 					return null;
 				}
 /*
@@ -1044,7 +1075,7 @@ public class PicSync extends IntentService {
 		/*TODO
 		Sort by timestamp!!!
 		 */
-		broadcastState("Scanning finished.");
+		broadcastCurrTask("Scanning finished.");
 		return fileListToSync;
 	}
 
@@ -1215,8 +1246,8 @@ public class PicSync extends IntentService {
 //		Log.d("makeHashNAS", srcFile + " md5sum: " + md5sum);
 		return md5sum;
 	}
-	private void scanNASForSyncedFiles(){
-		final String LOG_TAG="scanNASForSyncedFiles";
+	private void scanCIFSFiles(){
+		final String LOG_TAG="scanCIFSFiles";
 		if (!NASService.checkConnection()) {
 			makeToast("NAS connection not available");
 			return;
@@ -1227,8 +1258,10 @@ public class PicSync extends IntentService {
 				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
 		}
 		scanMediaFilesToSync();
+		broadcastCurrTask(stateCurrTaskDescription="Updating local hashes");
 		MediaFilesDB.updateHashOfAllFiles();
 
+		broadcastCurrTask(stateCurrTaskDescription="Scanning remote files");
 		List<NASFileMetadataStruct> listOfNASFiles = listNASFilesWithSize(tgtNASPath);
 		if (listOfNASFiles == null)
 			return;
@@ -1237,6 +1270,7 @@ public class PicSync extends IntentService {
 		// Tento cyklus ide cez vsetky najdene obrazky na NASku, co je samozrejme blbost
 		// Treba to prerobit na cyklus na kontrolu podla lokalnych obrazkov
 
+		broadcastCurrTask(stateCurrTaskDescription="Comparing repositories");
 		Cursor cAllFiles = MediaFilesDB.getAllFiles();
 		cAllFiles.moveToFirst();
 		int colSRCPATH = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
@@ -1289,7 +1323,7 @@ public class PicSync extends IntentService {
 */
 		MediaFilesDB.getDBStatistics();
 		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
-
+		broadcastCurrTask(stateCurrTaskDescription="Idle");
 	}
 	private int scanMediaFilesToSync() {
 		SmbFile tgtMediaFile;
@@ -1304,11 +1338,11 @@ public class PicSync extends IntentService {
 		MediaFilesDB.getDBStatistics();
 //		long newRowId;
 		if (mediaPaths.size() > 0) {
-			broadcastState("Scanning media");
+			broadcastCurrTask("Scanning media");
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_SCANNING;
 		}
 		else {
-			broadcastState("No folders configured");
+			broadcastCurrTask("No folders configured");
 			return 0;
 		}
 		for (String mediaPath : mediaPaths) {
@@ -1319,7 +1353,7 @@ public class PicSync extends IntentService {
 				broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 			}
 		}
-		broadcastState("Scanning done");
+		broadcastCurrTask("Scanning done");
 		return mediaFilesCountToSync;
 	}
 
@@ -1403,13 +1437,13 @@ public class PicSync extends IntentService {
 				initializeMD5();
 			int read = 0;
 			long read_total = 0;
-			while (((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) && PicSyncState == ePicSyncState.PIC_SYNC_STATE_SYNCING) {
+			while (((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) && !stateCopyPaused && PicSyncState == ePicSyncState.PIC_SYNC_STATE_SYNCING) {
 				read_total += read;
 				if (cksumEnabled && read_total < cksumMaxBytes)
 					digestMD5.update(buffer, 0, read);
 				tgtFileStreamTMP.write(buffer, 0, read);
 			}
-			if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING)
+			if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING || stateCopyPaused)
 				throw new InterruptedException("InterruptedException");
 			if (cksumEnabled) {
 				md5sumBytes = digestMD5.digest();
@@ -1428,7 +1462,7 @@ public class PicSync extends IntentService {
 			rc = false;
 		} catch (InterruptedException e){
 			e.printStackTrace();
-			if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING){
+			if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING || stateCopyPaused){
 				try {
 					if (tgtFileStreamTMP != null) {
 						tgtFileStreamTMP.close();
@@ -1556,23 +1590,25 @@ public class PicSync extends IntentService {
 		MediaFilesDB.getUnsyncedFilesCloseDB();
 	}
 
-	private void handleActionGetState() {
-		Log.i("PicSync", "handleActionGetState: " + stateInternalDescription);
+	private void handleActionGetCurrTask() {
+		Log.i("PicSync", "handleActionGetCurrTask: " + stateCurrTaskDescription);
 		initPreferences();
 		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
-			broadcastState("Not Configured");
+			broadcastCurrTask("Not Configured");
 		initlastCopiedImageTimestamp();
 		lastCopiedImageDate = new Date(timestampFile.lastModified());
 		lastCopiedImageTimestamp = lastCopiedImageDate.getTime();
 		broadcastLastCopiedImageTimestamp();
 
 		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
-			broadcastState("Not Configured");
+			broadcastCurrTask("Not Configured");
 		if (!prefMACverified)
 			prefMACverified = settings.getBoolean("prefMACverified", false);
 
-		broadcastState(stateInternalDescription);
+		broadcastCurrTask(stateCurrTaskDescription);
+		NASService.checkConnection();
 		broadcastConnectionStatus();
+		MediaFilesDB.getDBStatistics();
 		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 	}
 
@@ -1589,7 +1625,7 @@ public class PicSync extends IntentService {
 		if (doit) {
 			Log.d(LOG_TAG,"Do it");
 
-			broadcastState(stateInternalDescription = "Sync initiated");
+			broadcastCurrTask(stateCurrTaskDescription = "Sync initiated");
 			doNotify();
 			broadcastConnectionStatus();
 			Log.d(LOG_TAG,"NAS Connected: "+new Boolean(stateNASConnected).toString());
@@ -1605,7 +1641,7 @@ public class PicSync extends IntentService {
 			initPreferences();
 			if (!stateNASConnected && prefWoLAllowed && prefMACverified) {
 				Log.d(LOG_TAG,"performing WoL");
-				broadcastState(stateInternalDescription = "Sending WoL packet");
+				broadcastCurrTask(stateCurrTaskDescription = "Sending WoL packet");
 				NASService.WoL();
 				NASService.waitForConnection(10, 2);
 			}
@@ -1616,13 +1652,13 @@ public class PicSync extends IntentService {
 			broadcastConnectionStatus();
 			if (stateNASConnected) {
 				PicSyncState = ePicSyncState.PIC_SYNC_STATE_SYNCING;
-				broadcastState(stateInternalDescription = "Copying files");
+				broadcastCurrTask(stateCurrTaskDescription = "Copying files");
 				doNotify();
 				Log.d(LOG_TAG,"Starting sync thread");
 				DoSyncInSeparateThread.run();
 			} else {
 				Log.d(LOG_TAG,"NAS Connected: "+new Boolean(stateNASConnected).toString());
-				broadcastState(stateInternalDescription = "Not in sync");
+				broadcastCurrTask(stateCurrTaskDescription = "Not in sync");
 			}
 			doNotify();
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
@@ -1696,7 +1732,7 @@ public class PicSync extends IntentService {
 				new NotificationCompat.Builder(this)
 						.setSmallIcon(R.drawable.ic_notifications_black_24dp)
 						.setContentTitle("PicSync")
-						.setContentText(stateInternalDescription);
+						.setContentText(stateCurrTaskDescription);
 		Intent notifyIntent = new Intent(this, MainScreen.class);
 		PendingIntent notifyPendingIntent =
 				PendingIntent.getActivity(

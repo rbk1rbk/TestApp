@@ -1,7 +1,6 @@
 package com.rbk.testapp;
 
 import android.Manifest;
-import android.app.ActivityManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -42,15 +41,16 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.Map;
 
+import static android.R.color.holo_green_light;
+import static android.R.color.holo_orange_dark;
 import static android.os.Environment.getExternalStorageDirectory;
-import static com.rbk.testapp.PicSyncScheduler.INTENT_EXTRA_SENDER;
 
 public class MainScreen extends AppCompatActivity {
 	private static final int mId=1;
 	private static String PACKAGE_NAME;
 	private static boolean alreadyRunning = false;
 	private static boolean MainScreenReceiverRegistered=false;
-	private static int MainScreenReceiverRegisteredCount=0;
+	private static volatile int MainScreenReceiverRegisteredCount=0;
 	private static String localPicSyncState, localTotalImages, localScannedImages, localUnsyncedImages, localNASConnectivity, localCopyFrom, localCopyTo;
 	private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss");
 	private final Context myContext = this;
@@ -58,6 +58,8 @@ public class MainScreen extends AppCompatActivity {
 	TextView twPicSyncState;
 	Button button;
 	private long localLastCopiedImageTimestamp;
+	private static boolean statePicSyncCopyPaused;
+	private static SharedPreferences settings;
 
 
     private BroadcastReceiver MainScreenReceiver = new BroadcastReceiver() {
@@ -94,13 +96,12 @@ public class MainScreen extends AppCompatActivity {
 					localScannedImages = ((Integer) bundle.getInt("ScannedImages")).toString();
 					localUnsyncedImages = ((Integer) bundle.getInt("UnsyncedImages")).toString();
 					((TextView) findViewById(R.id.twTotalImages)).setText(localTotalImages);
-					((TextView) findViewById(R.id.twScannedImages)).setText(localScannedImages);
 					((TextView) findViewById(R.id.twUnsyncedImages)).setText(localUnsyncedImages);
 				}
-				if (Message.equals("msgState")) {
-					localPicSyncState = bundle.getString(PicSync.STATE);
-					((TextView) findViewById(R.id.twPicSyncState)).setText(localPicSyncState);
-					doNotify();
+				if (Message.equals(PicSync.PICSYNC_CURRTASK)) {
+					localPicSyncState = bundle.getString(PicSync.PICSYNC_CURRTASK);
+					((TextView) findViewById(R.id.twPicSyncCurrTask)).setText(localPicSyncState);
+					updateNotificationIcon();
 				}
 				if (Message.equals("msgLastCopiedImageTimestamp")) {
 					localLastCopiedImageTimestamp = bundle.getLong("lastCopiedImageDate");
@@ -129,15 +130,13 @@ public class MainScreen extends AppCompatActivity {
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
-            Intent myIntent = new Intent(this, SettingsActivity.class);
-            this.startActivity(myIntent);
+            this.startActivity(new Intent(this, SettingsActivity.class));
             return true;
         }
 
-        if (id == R.id.action_rescan) {
-			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
-			PicSyncIntent.setAction(PicSync.ACTION_SUGGEST_RESCAN);
-            this.startService(PicSyncIntent);
+        if (id == R.id.action_rescanNAS) {
+            this.startService(new Intent(myContext, PicSync.class)
+					.setAction(PicSync.ACTION_RESCAN_NAS_FILES));
             return true;
         }
 
@@ -254,10 +253,10 @@ public class MainScreen extends AppCompatActivity {
             Log.i("MainScreen", "Already running, return");
             return;
         }
-
+		settings = PreferenceManager.getDefaultSharedPreferences(this);
+		statePicSyncCopyPaused = settings.getBoolean("statePicSyncCopyPaused", true);
 		localPicSyncState = (String) ((TextView) findViewById(R.id.twPicSyncState)).getText();
 		localTotalImages = (String) ((TextView) findViewById(R.id.twTotalImages)).getText();
-		localUnsyncedImages = (String) ((TextView) findViewById(R.id.twUnsyncedImages)).getText();
 		localNASConnectivity = (String) ((TextView) findViewById(R.id.twNASConnectivity)).getText();
 		localCopyFrom = (String) ((TextView) findViewById(R.id.twCopyFrom)).getText();
 		localCopyTo = (String) ((TextView) findViewById(R.id.twCopyTo)).getText();
@@ -276,6 +275,7 @@ public class MainScreen extends AppCompatActivity {
 	protected void onStart() {
 		Log.i("MainScreen", "onStart called");
 		super.onStart();
+/*
 		ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
 		boolean servicePicSyncSchedulerRunning = false;
 		for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
@@ -287,6 +287,7 @@ public class MainScreen extends AppCompatActivity {
 			intent.putExtra(INTENT_EXTRA_SENDER,this.getClass().getSimpleName());
 			startService(intent);
 		}
+*/
 	}
 
 	@Override
@@ -309,16 +310,13 @@ public class MainScreen extends AppCompatActivity {
 	protected void onResume() {
         Log.i("MainScreen","onResume called");
         super.onResume();
-        DrawMainScreen();
-		doNotify();
+		updateNotificationIcon();
 		if (MainScreenReceiverRegisteredCount==0) {
 			registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
 			Log.i("MainScreen", "Registering a receiver");
 			MainScreenReceiverRegisteredCount++;
 		}
-        Intent PicSyncIntent = new Intent(this,PicSync.class);
-        PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
-        this.startService(PicSyncIntent);
+		DrawMainScreen();
         Log.i("MainScreen", "onResume finished");
     }
 
@@ -351,7 +349,7 @@ public class MainScreen extends AppCompatActivity {
                 // If request is cancelled, the result arrays are empty.
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     Intent PicSyncIntent = new Intent(this, PicSync.class);
-                    PicSyncIntent.setAction(PicSync.ACTION_GET_STATE);
+                    PicSyncIntent.setAction(PicSync.ACTION_GET_CURRTASK);
                     this.startService(PicSyncIntent);
                 } else {
 
@@ -415,12 +413,33 @@ public class MainScreen extends AppCompatActivity {
 		dialog.setTitle("Date & Time");
 		dialog.show();
 	}
+	private void setbtnPauseState(){
+		int btnPauseColor;
+		String btnPauseString;
+		String twPauseStateString;
+		if (!statePicSyncCopyPaused) {
+			btnPauseColor = holo_green_light;
+			btnPauseString = "Pause synchronization";
+			twPauseStateString = "Ready";
+		}
+		else {
+			btnPauseColor=holo_orange_dark;
+			btnPauseString = "Resume synchronization";
+			twPauseStateString = "Paused";
+		}
+
+		if (android.os.Build.VERSION.SDK_INT >= 23)
+			findViewById(R.id.btnPause).setBackgroundColor(getResources().getColor(btnPauseColor, getTheme()));
+		else
+			findViewById(R.id.btnPause).setBackgroundColor(getResources().getColor(btnPauseColor));
+		((Button) findViewById(R.id.btnPause)).setText(btnPauseString);
+		((TextView) findViewById(R.id.twPicSyncState)).setText(twPauseStateString);
+	}
 	protected void DrawMainScreen(){
 		button = (Button) findViewById(R.id.btnSyncNow);
 
 		((TextView) findViewById(R.id.twPicSyncState)).setText(localPicSyncState);
 		((TextView) findViewById(R.id.twTotalImages)).setText(localTotalImages);
-		((TextView) findViewById(R.id.twScannedImages)).setText(localScannedImages);
 		((TextView) findViewById(R.id.twUnsyncedImages)).setText(localUnsyncedImages);
 		((TextView) findViewById(R.id.twNASConnectivity)).setText(localNASConnectivity);
 		((TextView) findViewById(R.id.twLastSyncedImage)).setText(dateFormat.format(new Date(localLastCopiedImageTimestamp)));
@@ -433,36 +452,53 @@ public class MainScreen extends AppCompatActivity {
 			((TextView) findViewById(R.id.twCopyTo)).setText(localCopyTo);
 		}
 
+		setbtnPauseState();
 		Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
 		setSupportActionBar(toolbar);
 		Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
 		PicSyncIntent.setAction(PicSync.ACTION_GET_NAS_CONNECTION);
 		this.startService(PicSyncIntent);
+		PicSyncIntent.setAction(PicSync.ACTION_GET_CURRTASK);
+		this.startService(PicSyncIntent);
+
 
 	};
 
 	public void btnOnClickListener_Pause(View v) {
+		statePicSyncCopyPaused=!statePicSyncCopyPaused;
+		setbtnPauseState();
+		SharedPreferences.Editor e = settings.edit();
+		e.putBoolean("statePicSyncCopyPaused",statePicSyncCopyPaused);
+		e.commit();
 		Intent PicSyncIntent = new Intent(MainScreen.this, PicSync.class);
-		PicSyncIntent.setAction(PicSync.ACTION_STOP_SYNC);
+		PicSyncIntent.setAction(PicSync.ACTION_COPY_PAUSE_CHANGED);
+/*
+		PicSyncIntent.putExtra("statePicSyncCopyPaused",statePicSyncCopyPaused);
 		PicSyncIntent.putExtra("cmdTimestamp",new Date().getTime());
+*/
 		this.startService(PicSyncIntent);
+		if (!statePicSyncCopyPaused)
+			startSyncCopying();
 	}
 
 	public void btnOnClickListener_SyncNow(View v) {
+/*
 		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
 			ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
 		} else
-			handlebtnSaveonClick();
+*/
+
+			startSyncCopying();
 	}
 
-	private void handlebtnSaveonClick(){
+	private void startSyncCopying(){
 		Intent PicSyncIntent=new Intent(MainScreen.this,PicSync.class);
 		PicSyncIntent.setAction(PicSync.ACTION_START_SYNC);
 		PicSyncIntent.putExtra(PicSync.ACTION_START_SYNC_FLAG,PicSync.ACTION_START_SYNC_RESTART);
 		PicSyncIntent.putExtra("cmdTimestamp",new Date().getTime());
 		this.startService(PicSyncIntent);
 	}
-	private void doNotify(){
+	private void updateNotificationIcon(){
 		NotificationCompat.Builder mBuilder =
 				new NotificationCompat.Builder(this)
 						.setSmallIcon(R.drawable.ic_sync_black_24dp)
