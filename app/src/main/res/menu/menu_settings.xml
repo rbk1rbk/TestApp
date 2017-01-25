@@ -29,6 +29,18 @@
         android:title="Import settings"
         app:showAsAction="never"/>
     <item
+        android:id="@+id/action_exportDB"
+        android:orderInCategory="105"
+        android:title="Export Database"
+        app:showAsAction="never"/>
+<!--
+    <item
+        android:id="@+id/action_importDB"
+        android:orderInCategory="104"
+        android:title="Import DB"
+        app:showAsAction="never"/>
+-->
+    <item
         android:id="@+id/action_set_last_run"
         android:orderInCategory="105"
         android:title="Change last sync time"

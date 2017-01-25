@@ -1,8 +1,6 @@
 package com.rbk.testapp;
 
 import android.Manifest;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -14,7 +12,6 @@ import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.preference.PreferenceManager;
 import android.support.v4.app.ActivityCompat;
-import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
@@ -101,7 +98,9 @@ public class MainScreen extends AppCompatActivity {
 				if (Message.equals(PicSync.PICSYNC_CURRTASK)) {
 					localPicSyncState = bundle.getString(PicSync.PICSYNC_CURRTASK);
 					((TextView) findViewById(R.id.twPicSyncCurrTask)).setText(localPicSyncState);
+/*
 					updateNotificationIcon();
+*/
 				}
 				if (Message.equals("msgLastCopiedImageTimestamp")) {
 					localLastCopiedImageTimestamp = bundle.getLong("lastCopiedImageDate");
@@ -142,6 +141,42 @@ public class MainScreen extends AppCompatActivity {
 
 	   if (id == R.id.action_set_last_run) {
 		   showDialogSetLastRun();
+		   return true;
+	   }
+	   if (id == R.id.action_exportDB){
+		   final byte[] buffer = new byte[256 * 1024];
+		   FileInputStream fIn=null;
+		   File exportFile=null;
+		   FileOutputStream fOut=null;
+		   try {
+			   fIn = new FileInputStream(getDatabasePath("PicSync.db"));
+			   //"/data/user/0/com.rbk.testapp/databases/PicSync.db"
+			   exportFile = new File(getExternalStorageDirectory(), "PicSync.db");
+			   fOut = new FileOutputStream(exportFile);
+			   exportFile.createNewFile();
+			   int read=0;
+			   while ((read=fIn.read(buffer,0,buffer.length)) > 0){
+				   fOut.write(buffer,0,read);
+			   }
+		   } catch (IOException e) {
+			   e.printStackTrace();
+
+		   }
+		   finally {
+			   if (fIn!=null)
+				   try {
+					   fIn.close();
+				   } catch (IOException e) {
+					   e.printStackTrace();
+				   }
+
+			   if (fOut!=null)
+				   try {
+					   fOut.close();
+				   } catch (IOException e) {
+					   e.printStackTrace();
+				   }
+		   }
 		   return true;
 	   }
 	   if (id == R.id.action_export) {
@@ -310,7 +345,9 @@ public class MainScreen extends AppCompatActivity {
 	protected void onResume() {
         Log.i("MainScreen","onResume called");
         super.onResume();
+/*
 		updateNotificationIcon();
+*/
 		if (MainScreenReceiverRegisteredCount==0) {
 			registerReceiver(MainScreenReceiver, new IntentFilter(PicSync.NOTIFICATION));
 			Log.i("MainScreen", "Registering a receiver");
@@ -497,27 +534,6 @@ public class MainScreen extends AppCompatActivity {
 		PicSyncIntent.putExtra(PicSync.ACTION_START_SYNC_FLAG,PicSync.ACTION_START_SYNC_RESTART);
 		PicSyncIntent.putExtra("cmdTimestamp",new Date().getTime());
 		this.startService(PicSyncIntent);
-	}
-	private void updateNotificationIcon(){
-		NotificationCompat.Builder mBuilder =
-				new NotificationCompat.Builder(this)
-						.setSmallIcon(R.drawable.ic_sync_black_24dp)
-						.setContentTitle("PicSync")
-						.setContentText(localPicSyncState);
-		Intent notifyIntent = new Intent(this, MainScreen.class);
-		PendingIntent notifyPendingIntent =
-				PendingIntent.getActivity(
-						this,
-						0,
-						notifyIntent,
-						PendingIntent.FLAG_UPDATE_CURRENT
-				);
-
-		mBuilder.setContentIntent(notifyPendingIntent);
-		NotificationManager mNotificationManager =
-				(NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-		mNotificationManager.notify(mId, mBuilder.build());
-
 	}
 }
 /*

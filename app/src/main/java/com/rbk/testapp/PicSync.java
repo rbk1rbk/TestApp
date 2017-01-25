@@ -463,6 +463,10 @@ public class PicSync extends IntentService {
 	}
 	private void initlastCopiedImageTimestamp() {
 		timestampFile = new File(getFilesDir(), timestampFileName);
+		if (MediaFilesDB == null)
+			MediaFilesDB = new MediaFilesDB(myContext);
+		//TODO: Prejdi vsetky obrazky od najstarsieho po najnovsi a ako lastCopiedImageDate
+		//TODO: daj cas posledneho sync suboru v serii
 		try {
 			if (!timestampFile.exists()) {
 				timestampFile.createNewFile();
@@ -474,8 +478,6 @@ public class PicSync extends IntentService {
 		}
 		lastCopiedImageDate = new Date(timestampFile.lastModified());
 		lastCopiedImageTimestamp = lastCopiedImageDate.getTime();
-		if (MediaFilesDB == null)
-			MediaFilesDB = new MediaFilesDB(myContext);
 
 		if (!preferenceInitialized)
 			initPreferences();
@@ -608,6 +610,7 @@ public class PicSync extends IntentService {
 		intent.putExtra("Message", PICSYNC_CURRTASK);
 		intent.putExtra(PICSYNC_CURRTASK, currTask);
 		sendBroadcast(intent);
+		updateNotificationIcon();
 	}
 
 	private void broadcastLastCopiedImageTimestamp() {
@@ -640,6 +643,26 @@ public class PicSync extends IntentService {
 		updateIntent.putExtra("ScannedImages", toscan);
 		updateIntent.putExtra("UnsyncedImages", tosync);
 		sendBroadcast(updateIntent);
+	}
+	private void updateNotificationIcon(){
+		NotificationCompat.Builder mBuilder =
+				new NotificationCompat.Builder(this)
+						.setSmallIcon(R.drawable.ic_sync_black_24dp)
+						.setContentTitle("PicSync")
+						.setContentText(stateCurrTaskDescription);
+		Intent notifyIntent = new Intent(this, MainScreen.class);
+		PendingIntent notifyPendingIntent =
+				PendingIntent.getActivity(
+						this,
+						0,
+						notifyIntent,
+						PendingIntent.FLAG_UPDATE_CURRENT
+				);
+
+		mBuilder.setContentIntent(notifyPendingIntent);
+		NotificationManager mNotificationManager =
+				(NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+		mNotificationManager.notify(mId, mBuilder.build());
 	}
 
 	private void makeToast(final String toastString) {
@@ -2185,7 +2208,7 @@ public class PicSync extends IntentService {
 			synchronized (this) {
 				dbOpened++;
 			}
-//			Log.d("onOpen "+db.toString(),Integer.toString(dbOpened));
+			Log.d("onOpen "+db.toString(),Integer.toString(dbOpened));
 		}
 
 		public void openDBRW() {

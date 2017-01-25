@@ -135,6 +135,7 @@ public class SyncedFoldersList extends AppCompatActivity {
 				confirmDeletionDialog.setNegativeButton("Delete", new DialogInterface.OnClickListener() {
 					public void onClick(DialogInterface dialog, int whichButton) {
 						folderList.remove(position);
+						//TODO: vymaz z DB vsetky nezosynchronizovane obrazky z tejto cesty
 						adapter.notifyDataSetChanged();
 						adapter.notifyDataSetInvalidated();
 						SharedPreferences.Editor editor = prefs.edit();
