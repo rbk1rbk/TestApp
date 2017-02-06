@@ -100,6 +100,7 @@ public class PicSyncScheduler extends Service {
 			Intent PicSyncIntent = new Intent(myContext, PicSync.class);
 			PicSyncIntent.setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN);
 			PicSyncIntent.putExtra("uri",uri.toString());
+			PicSyncIntent.putExtra("cmdTimestamp",new Date().getTime());
 			myContext.startService(PicSyncIntent);
 			evaluateTheNeedOfSync();
 		}
@@ -191,6 +192,7 @@ public class PicSyncScheduler extends Service {
 			Log.d(LOG_TAG,"Dumping Intent end");
 		}
 	}
+/*
 	private void broadcastWifiState(){
 		Intent PicSyncIntent = new Intent(myContext, PicSync.class);
 		PicSyncIntent.setAction("PicSyncSchedulerNotification");
@@ -198,6 +200,7 @@ public class PicSyncScheduler extends Service {
 		myContext.startService(PicSyncIntent);
 		Log.d("broadcastWifiState", "Sending WifiOn connection="+isConnected);
 	}
+*/
 	private void getMySettings(){
 		if (settings == null)
 			settings = PreferenceManager.getDefaultSharedPreferences(myContext);
@@ -206,11 +209,14 @@ public class PicSyncScheduler extends Service {
 
 	}
 	private void broadcastInitialMediaScan(){
-		startService(new Intent(this, PicSync.class).setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN));
+		startService(new Intent(this, PicSync.class)
+				.setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN)
+				.putExtra("cmdTimestamp", new Date().getTime())
+		);
 	}
 	private void askToRun(){
 		Log.d("PicSyncScheduler", "Requesting start sync");
-		broadcastWifiState();
+//		broadcastWifiState();
 		startService(new Intent(this, PicSync.class)
 				.setAction(PicSync.ACTION_START_SYNC)
 				.putExtra("cmdTimestamp", new Date().getTime())
@@ -471,7 +477,7 @@ public class PicSyncScheduler extends Service {
 			verifyWifiConnection(intent);
 			Log.d("wifiChangeReceiver", "onHomeWifi: " + Boolean.toString(onHomeWifi) + ",onHomeWifi_Old: " + Boolean.toString(onHomeWifi_Old));
 			if (onHomeWifi != onHomeWifi_Old || isConnected != isConnected_Old) {
-				broadcastWifiState();
+//				broadcastWifiState();
 				evaluateTheNeedOfSync();
 				onHomeWifi_Old=onHomeWifi;
 				isConnected_Old=isConnected;

@@ -22,6 +22,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.ListView;
 
+import java.util.Date;
 import java.util.List;
 
 public class SettingsActivity extends AppCompatPreferenceActivity {
@@ -461,7 +462,11 @@ public class SettingsActivity extends AppCompatPreferenceActivity {
 
 	@Override
 	protected void onDestroy() {
-		startService(new Intent(this, PicSync.class).setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN));
+		// TODO: Toto je blbost, potrebu rescanu sa musi riesit na zaklade zmenenych parametrov
+		startService(new Intent(this, PicSync.class)
+				.setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN)
+				.putExtra("cmdTimestamp", new Date().getTime())
+		);
 		super.onDestroy();
 	}
 }

@@ -22,10 +22,14 @@ public final class Constants {
 		public static final String COLUMN_NAME_TGT = "tgtFileNameFull";
 		public static final String COLUMN_NAME_SRC_TS = "timestamp";
 		public static final String COLUMN_NAME_EXIF_HASH = "exifHash";
+		public static final String COLUMN_NAME_EXIF_HASHTYPE = "exifHashType";
+/*
 		public static final String COLUMN_NAME_FILE_HASH = "srcFileHash";
 		public static final String COLUMN_NAME_FILE_HASH_SIZE = "srcFileHashSize";
+*/
 		public static final String COLUMN_NAME_SRC_FILESIZE = "srcFileSize";
 	}
+	public static final Integer MediaFilesDBEntry_EXIF_HASHTYPE = 1;
 
 
 }

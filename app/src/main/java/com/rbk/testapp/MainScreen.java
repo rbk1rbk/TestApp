@@ -144,7 +144,7 @@ public class MainScreen extends AppCompatActivity {
 		   return true;
 	   }
 	   if (id == R.id.action_exportDB){
-		   final byte[] buffer = new byte[256 * 1024];
+		   final byte[] buffer = new byte[8 * 1024];
 		   FileInputStream fIn=null;
 		   File exportFile=null;
 		   FileOutputStream fOut=null;
@@ -424,7 +424,9 @@ public class MainScreen extends AppCompatActivity {
 				PicSyncIntent.putExtra("lastCopiedImageDate", resultTime);
 				myContext.startService(PicSyncIntent);
 				myContext.startService(new Intent(MainScreen.this, PicSync.class)
-											   .setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN));
+						.setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN)
+						.putExtra("cmdTimestamp", new Date().getTime())
+				);
 
 				_dialog.dismiss();
 			}

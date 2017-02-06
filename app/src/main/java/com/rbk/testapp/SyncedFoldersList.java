@@ -134,8 +134,14 @@ public class SyncedFoldersList extends AppCompatActivity {
 				confirmDeletionDialog.setMessage(selectedValue);
 				confirmDeletionDialog.setNegativeButton("Delete", new DialogInterface.OnClickListener() {
 					public void onClick(DialogInterface dialog, int whichButton) {
+						String intentParamLocalFolder=folderList.get(position).toString();
 						folderList.remove(position);
 						//TODO: vymaz z DB vsetky nezosynchronizovane obrazky z tejto cesty
+						Intent intentPicSync = new Intent(MyContext, PicSync.class);
+						intentPicSync.setAction(PicSync.ACTION_DEL_MEDIA_FOLDERS_W_PICS);
+						intentPicSync.putExtra(PicSync.INTENT_PARAM_LOCAL_FOLDER,intentParamLocalFolder);
+						startService(intentPicSync);
+
 						adapter.notifyDataSetChanged();
 						adapter.notifyDataSetInvalidated();
 						SharedPreferences.Editor editor = prefs.edit();

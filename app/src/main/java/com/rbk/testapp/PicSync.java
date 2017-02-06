@@ -13,7 +13,10 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.media.ExifInterface;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
+import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
 import android.os.Build;
@@ -79,6 +82,8 @@ public class PicSync extends IntentService {
 	public static final String NOTIFICATION = "com.rbk.testapp.MainScreen.receiver";
 //	public static final String INTENT_PARENT = "IntentParent";
 	static final String ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS = "PicSync.addMediaFolders";
+	static final String ACTION_DEL_MEDIA_FOLDERS_W_PICS = "PicSync.delMediaFolder";
+	static final String INTENT_PARAM_LOCAL_FOLDER = "PicSync.localFolder";
 	static final String ACTION_GET_STORAGE_PATHS = "PicSync.getAllExternalStoragePaths";
 	static final String ACTION_GET_NAS_CONNECTION = "PicSync.getNASConnection";
 	static final String ACTION_SET_LAST_IMAGE_TIMESTAMP = "PicSync.setLastImageTimestamp";
@@ -107,9 +112,9 @@ public class PicSync extends IntentService {
 	static String prefTGTFolderStructure, prefsSubfolderNameFormat, prefTGTRenameOption, prefTGTAlreadyExistsTest, prefTGTAlreadyExistsRename;
 	static boolean prefEnabledWakeLockCopy;
 	static boolean prefCreatePerAlbumFolder;
-	static Date lastCopiedImageDate;
-	static long lastCopiedImageTimestamp;
-	private static File timestampFile;
+//	static Date lastCopiedImageDate;
+	static long consistentSyncTimestamp;
+//	private static File timestampFile;
 	private static IBinder myBinder;
 	private static boolean prefMACverified = false;
 	private static Handler h;
@@ -121,7 +126,7 @@ public class PicSync extends IntentService {
 	private static Integer mediaFilesCountToSync = -1;
 	private static PicSync.MediaFilesDB MediaFilesDB;
 	private static volatile ePicSyncState PicSyncState = ePicSyncState.PIC_SYNC_STATE_STOPPED;
-	private static boolean constructNASPathErrorFileExist=false;
+	private boolean constructNASPathErrorFileExist=false;
 //	private static PicSyncScheduler picSyncSchedulerService;
 //	private static boolean servicePicSyncSchedulerServiceBound = false;
 
@@ -141,6 +146,7 @@ public class PicSync extends IntentService {
 	static final String ACTION_SUGGEST_MEDIA_SCAN = "PicSync.suggestMediaScan";
 	static final String ACTION_RESCAN_NAS_FILES = "PicSync.suggestRescan";
 	static volatile long lastMediaScanIntentTimestamp=0;
+	private static List<NASFileMetadataStruct> listOfNASFiles;
 
 	static final String ACTION_COPY_PAUSE_CHANGED = "PicSync.CopyPauseChanged";
 	static volatile long lastCopyPauseChangedIntentTimestamp=0;
@@ -152,13 +158,14 @@ public class PicSync extends IntentService {
 
 	static volatile boolean stateNASConnected = false;
 	static volatile boolean stateNASauthenticated = false;
-	static volatile boolean stateHomeWifiConnected = false;
+//	static volatile boolean stateHomeWifiConnected = false;
 
 	private final Context myContext = this;
 	private final String timestampFileName = "timestampFile";
 	private final NASService nasService = new NASService(myContext);
 
 	private List listCifsBrowser;
+	private long lastSuggestMediaScanTimestamp=0;
 
 	class NASFileMetadataStruct{
 		String fileNameFull;
@@ -196,7 +203,7 @@ public class PicSync extends IntentService {
 				return false;
 			boolean isItDirectory = f.isDirectory();
 			if (!isItDirectory) {
-				if (f.lastModified() <= lastCopiedImageTimestamp) {
+				if (f.lastModified() <= consistentSyncTimestamp) {
 					return false;
 				}
 			} else
@@ -299,13 +306,7 @@ public class PicSync extends IntentService {
 		super("PicSync");
 	}
 
-	private static String constructNASPath(String srcFileNameFull, long srcFileTimestamp) {
-		String srcFileName = srcFileNameFull.substring(srcFileNameFull.lastIndexOf('/') + 1);
-		String srcFilePath = srcFileNameFull.substring(0, srcFileNameFull.lastIndexOf('/'));
-		return constructNASPath(srcFilePath, srcFileName, srcFileTimestamp);
-	}
-
-	private static String constructNASPath(String srcFilePath, String srcFileName, long srcFileTimestamp) {
+	private String constructNASPath(String srcFilePath, String srcFileName, long srcFileTimestamp) {
 		constructNASPathErrorFileExist=false;
 		String tgtFileNameFull;
 		if (tgtNASPath == null || tgtNASPath.length()==0) {
@@ -376,23 +377,6 @@ public class PicSync extends IntentService {
 		return tgtFileNameFull;
 	}
 
-	static private void saveLastCopiedImageTimestamp(Date timestamp) {
-		if (lastCopiedImageDate.getTime() < timestamp.getTime())
-			return;
-		lastCopiedImageDate = timestamp;
-		lastCopiedImageTimestamp = lastCopiedImageDate.getTime();
-		if (lastCopiedImageTimestamp < 0)
-			return;
-		timestampFile.setLastModified(lastCopiedImageDate.getTime());
-	}
-
-	static private void saveLastCopiedImageTimestamp() {
-		saveLastCopiedImageTimestamp(new Date());
-	}
-
-	static private void saveLastCopiedImageTimestamp(long timestamp) {
-		saveLastCopiedImageTimestamp(new Date(timestamp));
-	}
 
 	@Override
 	public void onCreate() {
@@ -444,6 +428,9 @@ public class PicSync extends IntentService {
 			stateCopyPaused=settings.getBoolean("statePicSyncCopyPaused", true);
 		}
 		super.onStartCommand(intent, flags, startId);
+		if (ACTION_SUGGEST_MEDIA_SCAN.equals(action)) {
+			lastSuggestMediaScanTimestamp=cmdTimestamp;
+		}
 /*
 		if (!servicePicSyncSchedulerServiceBound)
 			bindService(new Intent(this,PicSyncScheduler.class),connectionPicSyncSchedulerService, Context.BIND_AUTO_CREATE);
@@ -461,26 +448,42 @@ public class PicSync extends IntentService {
 		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
 		getAllSettings();
 	}
+	private void saveConsistentSyncTimestamp(long timestamp) {
+		if (timestamp <= 0)
+			return;
+		SharedPreferences.Editor e = settings.edit();
+		e.putLong("consistentSyncTimestamp",timestamp);
+		e.apply();
+		consistentSyncTimestamp = timestamp;
+		broadcastLastCopiedImageTimestamp();
+	}
 	private void initlastCopiedImageTimestamp() {
+		if (!preferenceInitialized)
+			initPreferences();
+		if (MediaFilesDB == null)
+			MediaFilesDB = new MediaFilesDB(myContext);
+		consistentSyncTimestamp=settings.getLong("consistentSyncTimestamp",0);
+		if (consistentSyncTimestamp <= 0)
+			saveConsistentSyncTimestamp(MediaFilesDB.getConsistentSyncTimestamp());
+/*
 		timestampFile = new File(getFilesDir(), timestampFileName);
 		if (MediaFilesDB == null)
 			MediaFilesDB = new MediaFilesDB(myContext);
 		//TODO: Prejdi vsetky obrazky od najstarsieho po najnovsi a ako lastCopiedImageDate
 		//TODO: daj cas posledneho sync suboru v serii
-		try {
 			if (!timestampFile.exists()) {
-				timestampFile.createNewFile();
-				timestampFile.setLastModified(0);
+				try {
+					timestampFile.createNewFile();
+					timestampFile.setLastModified(MediaFilesDB.getConsistentSyncTimestamp());
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
 
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 		lastCopiedImageDate = new Date(timestampFile.lastModified());
-		lastCopiedImageTimestamp = lastCopiedImageDate.getTime();
+		consistentSyncTimestamp = lastCopiedImageDate.getTime();
+*/
 
-		if (!preferenceInitialized)
-			initPreferences();
 
 		if (!prefMACverified)
 			prefMACverified = settings.getBoolean("prefMACverified", false);
@@ -501,7 +504,6 @@ public class PicSync extends IntentService {
 */
 		super.onDestroy();
 	}
-
 	@Override
 	public void onLowMemory() {
 		Log.d("PicSync", "onLowMemory");
@@ -616,7 +618,7 @@ public class PicSync extends IntentService {
 	private void broadcastLastCopiedImageTimestamp() {
 		Intent intent = new Intent(NOTIFICATION);
 		intent.putExtra("Message", "msgLastCopiedImageTimestamp");
-		intent.putExtra("lastCopiedImageDate", lastCopiedImageDate.getTime());
+		intent.putExtra("lastCopiedImageDate", consistentSyncTimestamp);
 
 		sendBroadcast(intent);
 	}
@@ -674,7 +676,6 @@ public class PicSync extends IntentService {
 			}
 		});
 	}
-
 	private boolean checkStoragePermission(){
 		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
 			Log.i("PicSync", "No permission to READ_EXTERNAL_STORAGE");
@@ -685,6 +686,7 @@ public class PicSync extends IntentService {
 		}
 		return true;
 	}
+
 /*
 	private ServiceConnection connectionPicSyncSchedulerService = new ServiceConnection() {
 
@@ -711,11 +713,20 @@ public class PicSync extends IntentService {
 			final long cmdTimestamp=intent.getLongExtra("cmdTimestamp",0);
 			Log.d(LOG_TAG, "onHandleIntent: " + action);
 
+/*
 			if (TextUtils.equals("PicSyncSchedulerNotification", action)) {
 				initlastCopiedImageTimestamp();
 				Boolean wifion = intent.getBooleanExtra("WifiOn", false);
 				stateHomeWifiConnected = wifion;
 				Log.d(LOG_TAG, "PicSyncSchedulerNotification: " + wifion);
+			}
+*/
+			if (ACTION_DEL_MEDIA_FOLDERS_W_PICS.equals(action)) {
+				final String srcMediaFilePath = intent.getStringExtra(INTENT_PARAM_LOCAL_FOLDER);
+				MediaFilesDB.removeLocalPathWithUnsyncedPics(srcMediaFilePath);
+				MediaFilesDB.getDBStatistics();
+				broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
+				return;
 			}
 			if (ACTION_BROWSE_CIFS.equals(action)) {
 				final String path = intent.getStringExtra("path");
@@ -745,7 +756,7 @@ public class PicSync extends IntentService {
 				}
 				if (!checkStoragePermission())
 					return;
-				if (!stateHomeWifiConnected) {
+				if (!NASService.isHomeWifiConnected()) {
 					makeToast("Wifi is not connected");
 					return;
 				}
@@ -766,10 +777,17 @@ public class PicSync extends IntentService {
 				return;
 			}
 			if (ACTION_RESCAN_NAS_FILES.equals(action)) {
-				scanCIFSFiles();
+				scanCIFS4SyncedFilesByFilesize();
+				scanCIFS4SyncedFilesByMetadata();
+				listOfNASFiles=null;
 				return;
 			}
 			if (ACTION_SUGGEST_MEDIA_SCAN.equals(action)) {
+				if (cmdTimestamp < lastSuggestMediaScanTimestamp) {
+					Log.d(LOG_TAG,"Old invocation. This cmdTimestamp:" + cmdTimestamp
+					+ "\nMost recent timestamp: " + lastSuggestMediaScanTimestamp);
+					return;
+				}
 				if (PicSyncState == ePicSyncState.PIC_SYNC_STATE_SYNCING)
 					return;
 				if (!checkStoragePermission())
@@ -780,7 +798,7 @@ public class PicSync extends IntentService {
 					scanMediaFilesFromUri(uri);
 				else
 					scanMediaFilesToSync();
-				if (mediaFilesCountToSync > 0 && stateHomeWifiConnected) {
+				if (mediaFilesCountToSync > 0 && NASService.isHomeWifiConnected()) {
 					handleActionStartSync("");
 				}
 				return;
@@ -806,7 +824,7 @@ public class PicSync extends IntentService {
 				initlastCopiedImageTimestamp();
 				long timestamp = intent.getLongExtra("lastCopiedImageDate", 0);
 				if (timestamp != 0) {
-					saveLastCopiedImageTimestamp(timestamp);
+					saveConsistentSyncTimestamp(timestamp);
 					broadcastLastCopiedImageTimestamp();
 				}
 			}
@@ -1113,7 +1131,7 @@ public class PicSync extends IntentService {
 		final Set<String> colValues = new HashSet<String>();
 		final Set<String> paths = new HashSet<String>();
 		try {
-			cursor = getContentResolver().query(uri, null, "datetaken > " + lastCopiedImageDate.getTime(), null, "datetaken desc");
+			cursor = getContentResolver().query(uri, null, "datetaken > " + consistentSyncTimestamp, null, "datetaken desc");
 			if (cursor == null)
 				return;
 			cursor.moveToFirst();
@@ -1269,8 +1287,60 @@ public class PicSync extends IntentService {
 //		Log.d("makeHashNAS", srcFile + " md5sum: " + md5sum);
 		return md5sum;
 	}
-	private void scanCIFSFiles(){
-		final String LOG_TAG="scanCIFSFiles";
+	private void scanCIFS4SyncedFilesByMetadata(){
+		final String LOG_TAG="scanCIFSByFilesize";
+		if (!NASService.checkConnection()) {
+			makeToast("NAS connection not available");
+			return;
+		}
+		if (tgtNASPath == null) {
+			tgtNASPath = settings.getString("prefsSMBURI", null);
+			if (tgtNASPath.endsWith("/"))
+				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
+		}
+		broadcastCurrTask(stateCurrTaskDescription="Updating local hashes");
+		MediaFilesDB.updateExifHashOfAllFiles();
+		if (listOfNASFiles == null)
+			listOfNASFiles = listNASFilesWithSize(tgtNASPath);
+		if (listOfNASFiles == null)
+			return;
+
+		broadcastCurrTask(stateCurrTaskDescription="Comparing EXIF tags");
+		Cursor cAllFiles = MediaFilesDB.getAllFiles();
+		cAllFiles.moveToFirst();
+		int colSRCPATH = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
+		int colSRCFILE = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
+		int colSRCSIZE = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILESIZE);
+		while (!cAllFiles.isAfterLast()){
+			Long fileSizeLocal = cAllFiles.getLong(colSRCSIZE);
+			String filePathLocal=cAllFiles.getString(colSRCPATH);
+			String fileNameLocal=cAllFiles.getString(colSRCFILE);
+			String fileNameFullLocal = filePathLocal + File.separator + fileNameLocal;
+			Log.d(LOG_TAG, "Searching for remote copy of " + fileNameFullLocal + " / " + fileSizeLocal);
+			int index=0;
+			long fileSizeNAS=-1L;
+			Integer listOfNASFilesSize = listOfNASFiles.size();
+			//Prejdi obrazky, ktore su rovnako velke +- 10kB
+			//TODO: skontrolovat ten for cyklus, neskonci pri prvom najdenom NAS subore s danou velkostou?
+			for (fileSizeNAS = listOfNASFiles.get(index).fileSize; index < listOfNASFilesSize && Math.abs(fileSizeLocal - (fileSizeNAS = listOfNASFiles.get(index).fileSize)) < 10*1024; index++);
+			if (fileSizeLocal == fileSizeNAS) {
+				String fileNameFullRemote = listOfNASFiles.get(index).fileNameFull;
+				Log.d(LOG_TAG, "Identical files: " + fileNameFullLocal + " and " + fileNameFullRemote);
+				MediaFilesDB.updateTgtFileName(filePathLocal,fileNameLocal,fileNameFullRemote);
+			}
+			else
+				MediaFilesDB.updateTgtFileName(filePathLocal,fileNameLocal,null);
+			cAllFiles.moveToNext();
+		}
+		MediaFilesDB.getDBStatistics();
+		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
+		broadcastCurrTask(stateCurrTaskDescription="Idle");
+
+	}
+	private void scanCIFS4SyncedFilesByFilesize(){
+		//TODO: toto predpoklada, ze identicke subory maju rovnaku velkost. Nerata teda so subormi, ktore napr. dostali tag
+		//Treba to prerobit na kontrolu podla Exif atributov, ktore sa nemenia, vid makeEXIFHash
+		final String LOG_TAG="scanCIFSByFilesize";
 		if (!NASService.checkConnection()) {
 			makeToast("NAS connection not available");
 			return;
@@ -1282,16 +1352,15 @@ public class PicSync extends IntentService {
 		}
 		scanMediaFilesToSync();
 		broadcastCurrTask(stateCurrTaskDescription="Updating local hashes");
-		MediaFilesDB.updateHashOfAllFiles();
+		MediaFilesDB.updateFileHashOfAllFiles();
 
 		broadcastCurrTask(stateCurrTaskDescription="Scanning remote files");
-		List<NASFileMetadataStruct> listOfNASFiles = listNASFilesWithSize(tgtNASPath);
+		if (listOfNASFiles == null)
+			listOfNASFiles = listNASFilesWithSize(tgtNASPath);
 		if (listOfNASFiles == null)
 			return;
 		Integer listOfNASFilesSize = listOfNASFiles.size();
 		Log.d(LOG_TAG,"Found NAS files: "+listOfNASFilesSize);
-		// Tento cyklus ide cez vsetky najdene obrazky na NASku, co je samozrejme blbost
-		// Treba to prerobit na cyklus na kontrolu podla lokalnych obrazkov
 
 		broadcastCurrTask(stateCurrTaskDescription="Comparing repositories");
 		Cursor cAllFiles = MediaFilesDB.getAllFiles();
@@ -1307,6 +1376,7 @@ public class PicSync extends IntentService {
 			Log.d(LOG_TAG, "Searching for remote copy of " + fileNameFullLocal + " / " + fileSizeLocal);
 			int index=0;
 			long fileSizeNAS=-1L;
+			//TODO: skontrolovat ten for cyklus, neskonci pri prvom najdenom NAS subore s danou velkostou?
 			for (fileSizeNAS = listOfNASFiles.get(index).fileSize; index < listOfNASFilesSize && fileSizeLocal != (fileSizeNAS = listOfNASFiles.get(index).fileSize); index++);
 /*
 				fileSizeNAS = listOfNASFiles.get(index).fileSize;
@@ -1593,6 +1663,7 @@ public class PicSync extends IntentService {
 			}
 			mediaFilesCountToSync--;
 			broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
+			saveConsistentSyncTimestamp(srcFileTimestamp);
 			cToSync.moveToNext();
 		}
 		if (!cToSync.isClosed())
@@ -1619,8 +1690,6 @@ public class PicSync extends IntentService {
 		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
 			broadcastCurrTask("Not Configured");
 		initlastCopiedImageTimestamp();
-		lastCopiedImageDate = new Date(timestampFile.lastModified());
-		lastCopiedImageTimestamp = lastCopiedImageDate.getTime();
 		broadcastLastCopiedImageTimestamp();
 
 		if (settings.getString("prefsSMBSRV", "EMPTY").equals("EMPTY"))
@@ -1821,7 +1890,7 @@ public class PicSync extends IntentService {
 //			Log.d("makeHash", srcFile + " md5sum: " + md5sum);
 			return md5sum;
 		}
-		public void updateHashOfAllFiles(){
+		public void updateFileHashOfAllFiles(){
 			db = getReadableDatabase();
 			Cursor cChkFile;
 			if (db == null)
@@ -1854,7 +1923,49 @@ public class PicSync extends IntentService {
 							+ " and "
 							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + cChkFile.getString(colSRCFILE) + "\"";
 					db.update(Constants.MediaFilesDBEntry.TABLE_NAME, newHashValues, where, null);
-					Log.d("updateHashOfAllFiles", fileNameFull + " md5sum: " + md5sum);
+					Log.d("updateFileHash", fileNameFull + " md5sum: " + md5sum);
+					cChkFile.moveToNext();
+				}
+				cChkFile.close();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			finally {
+				if (--dbOpened == 0)
+					db.close();
+			}
+		}
+		public void updateExifHashOfAllFiles(){
+			db = getReadableDatabase();
+			Cursor cChkFile;
+			if (db == null)
+				return;
+			int count = 1;
+
+			try {
+				cChkFile = db.rawQuery("select " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE
+								+ " from " + Constants.MediaFilesDBEntry.TABLE_NAME
+								+ " where "
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH + "=\"" + 0 + "\""
+								+ " or "
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH + " is null "
+								+ " or "
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASHTYPE + "!=\"" + Constants.MediaFilesDBEntry_EXIF_HASHTYPE + "\""
+						, null);
+				cChkFile.moveToFirst();
+				while (!cChkFile.isAfterLast()) {
+					int colSRCPATH = cChkFile.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
+					int colSRCFILE = cChkFile.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
+					String fileNameFull = cChkFile.getString(colSRCPATH) + File.separator + cChkFile.getString(colSRCFILE);
+					String exifHash = makeEXIFHash(fileNameFull);
+					ContentValues newHashValues = new ContentValues();
+					newHashValues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH, exifHash);
+					newHashValues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASHTYPE, Constants.MediaFilesDBEntry_EXIF_HASHTYPE);
+					String where = Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + "=\"" +  cChkFile.getString(colSRCPATH) + "\""
+							+ " and "
+							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + cChkFile.getString(colSRCFILE) + "\"";
+					db.update(Constants.MediaFilesDBEntry.TABLE_NAME, newHashValues, where, null);
+					Log.d("updateFileHash", fileNameFull + " exifHash: " + exifHash);
 					cChkFile.moveToNext();
 				}
 				cChkFile.close();
@@ -1958,6 +2069,31 @@ public class PicSync extends IntentService {
 					+ " and "
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + srcMediaFileName + "\"";
 			db.update(Constants.MediaFilesDBEntry.TABLE_NAME, newvalues, where, null);
+		}
+		void removeLocalPathWithUnsyncedPics(String srcMediaFilePath) {
+			db = getWritableDatabase();
+			String WHERE = Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + " like \"" + srcMediaFilePath + "%\""
+					+ " and ("
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
+					+ " or "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null )";
+
+			try {
+				Cursor c = db.rawQuery("select count(*) from " + Constants.MediaFilesDBEntry.TABLE_NAME
+								+ " where "
+						+ WHERE
+						, null);
+				c.moveToFirst();
+				Integer picsToRemove = c.getInt(0);
+				c.close();
+				Log.d("removePath","Removing "+ picsToRemove+" pictures from path "+srcMediaFilePath);
+				db.delete(Constants.MediaFilesDBEntry.TABLE_NAME, WHERE, null);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			if (--dbOpened == 0)
+				db.close();
+
 		}
 		boolean removeSrcFile(String srcMediaFileNameFull) {
 			db = getWritableDatabase();
@@ -2078,7 +2214,7 @@ public class PicSync extends IntentService {
 											  + " from " + Constants.MediaFilesDBEntry.TABLE_NAME
 											  + " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
 											  + " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
-											  + " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " desc "
+											  + " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " asc "
 						, null);
 				if (cToSync == null)
 					return null;
@@ -2115,6 +2251,48 @@ public class PicSync extends IntentService {
 			if (--dbOpened == 0)
 				db.close();
 		}
+	/*
+	* Function return timestamp of the most recent synced pic
+	* where all older pictures are also synced
+	* */
+		Long getConsistentSyncTimestamp() {
+			db = getWritableDatabase();
+			String QUERY = "select " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS
+					+ " from " + Constants.MediaFilesDBEntry.TABLE_NAME
+					+ " where ( " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
+					+ " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
+					+ " ) and "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " > 0 "
+					+ " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " asc"
+					+ " limit 1";
+			Cursor cOldestUnsyncedImage = db.rawQuery(QUERY, null);
+			if (cOldestUnsyncedImage == null)
+				return 0L;
+			cOldestUnsyncedImage.moveToFirst();
+			if (cOldestUnsyncedImage.isAfterLast())
+				return 0L;
+			Long oldestUnsyncedImage = cOldestUnsyncedImage.getLong(0);
+			cOldestUnsyncedImage.close();
+
+			QUERY = "select " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS
+					+ " from " + Constants.MediaFilesDBEntry.TABLE_NAME
+					+ " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + "  != \"\" "
+					+ " and " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is not null "
+					+ " and " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " > 0 "
+					+ " and " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " <  " + oldestUnsyncedImage
+					+ " order by timestamp desc limit 1";
+			Cursor cConsistentSyncTimestamp = db.rawQuery(QUERY, null);
+			if (cConsistentSyncTimestamp == null)
+				return 0L;
+			cConsistentSyncTimestamp.moveToFirst();
+			if (cConsistentSyncTimestamp.isAfterLast())
+				return oldestUnsyncedImage-1;
+			Long ConsistentSyncTimestamp = cConsistentSyncTimestamp.getLong(0);
+			cConsistentSyncTimestamp.close();
+			if (--dbOpened == 0)
+				db.close();
+			return ConsistentSyncTimestamp;
+		}
 		void getDBStatistics() {
 			db = getWritableDatabase();
 			Cursor c = db.rawQuery("select count (*) from " + Constants.MediaFilesDBEntry.TABLE_NAME, null);
@@ -2131,35 +2309,21 @@ public class PicSync extends IntentService {
 			mediaFilesCountToSync = cToSync.getInt(0);
 			cToSync.close();
 
+/*
 			Cursor cHighestScannedTimestamp = db.rawQuery("select max("
 							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + ")"
 							+ " from "
 							+ Constants.MediaFilesDBEntry.TABLE_NAME
 					, null);
 			cHighestScannedTimestamp.moveToFirst();
+*/
 /*
 			lastScannedImageTimestamp = cHighestScannedTimestamp.getLong(0);
-*/
+*//*
+
 			cHighestScannedTimestamp.close();
 
-			Cursor cHighestSyncedTimestamp = db.rawQuery("select max("
-							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + ")"
-							+ " from "
-							+ Constants.MediaFilesDBEntry.TABLE_NAME
-							+ " where "
-							+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " != \"\""
-							+ " or "
-							+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is not null"
-					, null);
-			cHighestSyncedTimestamp.moveToFirst();
-			long highestSyncedTimestamp = cHighestSyncedTimestamp.getLong(0);
-
-
-			if (highestSyncedTimestamp == 0)
-				saveLastCopiedImageTimestamp(1);
-			else
-				saveLastCopiedImageTimestamp(highestSyncedTimestamp);
-			cHighestSyncedTimestamp.close();
+*/
 			if (--dbOpened == 0)
 				db.close();
 		}
@@ -2177,7 +2341,8 @@ public class PicSync extends IntentService {
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_MIN_FILE + " TEXT, "
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " INTEGER, "
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " TEXT, "
-					+ Constants.MediaFilesDBEntry.COLUMN_NAME_FILE_HASH + " TEXT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH + " TEXT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASHTYPE + " INTEGER, "
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILESIZE + " INTEGER, "
 					+ "CONSTRAINT srcFile_unique UNIQUE (" + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH
 					+ "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE
@@ -2241,12 +2406,33 @@ public class PicSync extends IntentService {
 			settings = PreferenceManager.getDefaultSharedPreferences(myContext);
 */
 		}
+		public static boolean isHomeWifiConnected() {
+			boolean onHomeWifi, isConnected;
+			int connType;
+			WifiManager wifiManager = (WifiManager) MyContext.getSystemService(WIFI_SERVICE);
+			ConnectivityManager cm = (ConnectivityManager) MyContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+			NetworkInfo networkInfo = cm.getActiveNetworkInfo();
+			if (networkInfo == null)
+				return false;
+			connType = networkInfo.getType();
+			if (connType == ConnectivityManager.TYPE_WIFI) {
+				isConnected = networkInfo.isConnected();
+				if (isConnected) {
+					final WifiInfo connectionInfo = wifiManager.getConnectionInfo();
+					if (connectionInfo != null) {
+						String ssid = connectionInfo.getSSID();
+						settings = PreferenceManager.getDefaultSharedPreferences(MyContext);
+						String prefsWifi = settings.getString("pref_homewifissid", "NoWifiWhatsoever");
+						return ssid.replaceAll("^\"|\"$", "").equals(prefsWifi);
+					}
+				}
+			}
+			return false;
+		}
 
 		public static boolean checkConnection() {
-			if (!stateHomeWifiConnected) {
-/*
-				makeToast("Wifi is not connected");
-*/
+			if (!isHomeWifiConnected()) {
+//				makeToast("Wifi is not connected");
 				return false;
 			}
 			stateNASConnected = true;
@@ -2292,7 +2478,7 @@ public class PicSync extends IntentService {
 		}
 
 		public static void openConnection() throws IOException {
-			if (!stateHomeWifiConnected) {
+			if (!isHomeWifiConnected()) {
 				return;
 			}
 			smbservername = settings.getString("prefsSMBSRV", "");
@@ -2417,7 +2603,7 @@ public class PicSync extends IntentService {
 			}
 		}
 
-		private static void makeToast(final String toastString) {
+		public static void makeToast(final String toastString) {
 			h = new Handler(MyContext.getMainLooper());
 			h.post(new Runnable() {
 				@Override
