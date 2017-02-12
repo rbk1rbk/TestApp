@@ -12,7 +12,6 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
-import android.media.ExifInterface;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -45,8 +44,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.UnknownHostException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -66,18 +63,10 @@ import jcifs.smb.SmbFileFilter;
 import jcifs.smb.SmbFileInputStream;
 import jcifs.smb.SmbFileOutputStream;
 
-import static android.content.ContentValues.TAG;
-import static android.media.ExifInterface.TAG_DATETIME;
-import static android.media.ExifInterface.TAG_EXPOSURE_TIME;
-import static android.media.ExifInterface.TAG_FOCAL_LENGTH;
-import static android.media.ExifInterface.TAG_IMAGE_LENGTH;
-import static android.media.ExifInterface.TAG_IMAGE_WIDTH;
-import static android.media.ExifInterface.TAG_ISO;
-import static android.media.ExifInterface.TAG_ISO_SPEED_RATINGS;
-import static android.media.ExifInterface.TAG_MODEL;
+import static com.rbk.testapp.Constants.cksumMaxBytes;
 import static java.lang.Thread.sleep;
 
-public class PicSync extends IntentService {
+public class PicSync extends IntentService{
 	private static final int mId=1;
 	public static final String NOTIFICATION = "com.rbk.testapp.MainScreen.receiver";
 //	public static final String INTENT_PARENT = "IntentParent";
@@ -103,8 +92,7 @@ public class PicSync extends IntentService {
 	static boolean prefWoLAllowed = false;
 	static boolean cksumEnabled = false;
 	private String cksumGlobalVariable = null;
-	static int cksumMaxBytes = 1024 * 1024;
-	MessageDigest digestMD5;
+
 	static boolean DEBUGdryRun = false;
 	static boolean preferenceInitialized = false;
 	static NtlmPasswordAuthentication auth = null;
@@ -1219,7 +1207,39 @@ public class PicSync extends IntentService {
 			}
 		}
 	};
-	private List<NASFileMetadataStruct> listNASFilesWithSize(String smbPath){
+	private RemoteFilesDB dbRemoteFiles = null;
+	void scanCIFSFilesWithSizeIntoDB(String smbPath){
+		SmbFile[] fileList=null;
+		try {
+			if (!smbPath.endsWith(File.separator))
+				smbPath = smbPath + File.separator;
+			fileList = new SmbFile(smbPath,auth).listFiles(mediaCIFSFilter);
+		} catch (MalformedURLException | SmbException e) {
+			e.printStackTrace();
+			return;
+		}
+		//fileList je null, ak dir neexistuje
+		if (fileList == null)
+			return;
+
+		for (SmbFile entry : fileList) {
+			try {
+				if (entry.isDirectory()) {
+					scanCIFSFilesWithSizeIntoDB(entry.getCanonicalPath());
+				} else {
+					Long fileSize=entry.length();
+					String fileName=entry.toString();
+					if (dbRemoteFiles == null)
+						dbRemoteFiles = new RemoteFilesDB(myContext);
+					dbRemoteFiles.addFile(fileName,fileSize);
+					Log.d("listNASFilesWithSize","Found "+fileName+" of size "+fileSize);
+				}
+			} catch (SmbException e) {
+				e.printStackTrace();
+			}
+		}
+	};
+/*	private List<NASFileMetadataStruct> listNASFilesWithSize(String smbPath){
 		List<NASFileMetadataStruct> NASFilesList = new ArrayList<NASFileMetadataStruct>();
 
 		SmbFile[] fileList=null;
@@ -1254,39 +1274,8 @@ public class PicSync extends IntentService {
 			}
 		}
 		return NASFilesList;
-	}
+	}*/
 
-	private String makeHashNAS(String srcFile){
-		SmbFileInputStream srcFileStream;
-		try {
-			srcFileStream = new SmbFileInputStream(new SmbFile(srcFile, auth));
-		} catch (UnknownHostException | SmbException | MalformedURLException e) {
-			e.printStackTrace();
-			return null;
-		}
-		int read = 0;
-		long read_total = 0;
-		final byte[] buffer = new byte[256 * 1024];
-		byte[] md5sumBytes;
-		String md5sum = new String();
-		initializeMD5();
-		if (digestMD5 == null)
-			return null;
-		try {
-			while (((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) && (read_total<cksumMaxBytes)) {
-				read_total += read;
-				digestMD5.update(buffer, 0, read);
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-
-		md5sumBytes = digestMD5.digest();
-		for (int i = 0; i < md5sumBytes.length; i++)
-			md5sum += Integer.toString((md5sumBytes[i] & 0xff) + 0x100, 16).substring(1);
-//		Log.d("makeHashNAS", srcFile + " md5sum: " + md5sum);
-		return md5sum;
-	}
 	private void scanCIFS4SyncedFilesByMetadata(){
 		final String LOG_TAG="scanCIFSByFilesize";
 		if (!NASService.checkConnection()) {
@@ -1298,38 +1287,56 @@ public class PicSync extends IntentService {
 			if (tgtNASPath.endsWith("/"))
 				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
 		}
-		broadcastCurrTask(stateCurrTaskDescription="Updating local hashes");
-		MediaFilesDB.updateExifHashOfAllFiles();
-		if (listOfNASFiles == null)
-			listOfNASFiles = listNASFilesWithSize(tgtNASPath);
-		if (listOfNASFiles == null)
+		broadcastCurrTask(stateCurrTaskDescription="Updating local fingerprints");
+		MediaFilesDB.updateMetadataHashOfAllFiles();
+		if (dbRemoteFiles == null) {
+			broadcastCurrTask(stateCurrTaskDescription="Scanning CIFS");
+			scanCIFSFilesWithSizeIntoDB(tgtNASPath);
+		}
+		if (dbRemoteFiles == null)
 			return;
 
-		broadcastCurrTask(stateCurrTaskDescription="Comparing EXIF tags");
+		broadcastCurrTask(stateCurrTaskDescription="Comparing local w/ remote");
 		Cursor cAllFiles = MediaFilesDB.getAllFiles();
 		cAllFiles.moveToFirst();
 		int colSRCPATH = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
 		int colSRCFILE = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
 		int colSRCSIZE = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILESIZE);
+		int colSRCHASH = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT);
 		while (!cAllFiles.isAfterLast()){
 			Long fileSizeLocal = cAllFiles.getLong(colSRCSIZE);
 			String filePathLocal=cAllFiles.getString(colSRCPATH);
 			String fileNameLocal=cAllFiles.getString(colSRCFILE);
+			String fileHashLocal=cAllFiles.getString(colSRCHASH);
 			String fileNameFullLocal = filePathLocal + File.separator + fileNameLocal;
 			Log.d(LOG_TAG, "Searching for remote copy of " + fileNameFullLocal + " / " + fileSizeLocal);
-			int index=0;
-			long fileSizeNAS=-1L;
-			Integer listOfNASFilesSize = listOfNASFiles.size();
-			//Prejdi obrazky, ktore su rovnako velke +- 10kB
-			//TODO: skontrolovat ten for cyklus, neskonci pri prvom najdenom NAS subore s danou velkostou?
-			for (fileSizeNAS = listOfNASFiles.get(index).fileSize; index < listOfNASFilesSize && Math.abs(fileSizeLocal - (fileSizeNAS = listOfNASFiles.get(index).fileSize)) < 10*1024; index++);
-			if (fileSizeLocal == fileSizeNAS) {
-				String fileNameFullRemote = listOfNASFiles.get(index).fileNameFull;
-				Log.d(LOG_TAG, "Identical files: " + fileNameFullLocal + " and " + fileNameFullRemote);
-				MediaFilesDB.updateTgtFileName(filePathLocal,fileNameLocal,fileNameFullRemote);
+			Cursor cSimilarRemoteFiles = RemoteFilesDB.getFilesBySize(fileSizeLocal,10*1024L);
+			cSimilarRemoteFiles.moveToFirst();
+			int colRemoteFileName=0;
+//			int colRemoteFileSize=0;
+			int colRemoteFileHash=0;
+			String fileHashRemote="";
+			if (!cSimilarRemoteFiles.isAfterLast()){
+				colRemoteFileName=cSimilarRemoteFiles.getColumnIndex(Constants.RemoteFilesDBEntry.COLUMN_NAME_FILE);
+//				colRemoteFileSize=cSimilarRemoteFiles.getColumnIndex(Constants.RemoteFilesDBEntry.COLUMN_NAME_FILESIZE);
+				colRemoteFileHash=cSimilarRemoteFiles.getColumnIndex(Constants.RemoteFilesDBEntry.COLUMN_NAME_FINGERPRINT);
+				fileHashRemote=cSimilarRemoteFiles.getString(colRemoteFileHash);
+				if (fileHashRemote.equals("")){
+					//sprav filehash
+					//updatni ho do DB
+				}
 			}
-			else
-				MediaFilesDB.updateTgtFileName(filePathLocal,fileNameLocal,null);
+
+			while (!cSimilarRemoteFiles.isAfterLast() && fileHashLocal.equals(fileHashRemote)){
+
+				cSimilarRemoteFiles.moveToNext();
+				fileHashRemote=cSimilarRemoteFiles.getString(colRemoteFileHash);
+			}
+			if (fileHashLocal.equals(fileHashRemote)) {
+				String fileNameFullRemote=cSimilarRemoteFiles.getString(colRemoteFileName);
+				Log.d(LOG_TAG, "Identical files: " + fileNameFullLocal + " and " + fileNameFullRemote);
+				MediaFilesDB.updateTgtFileName(filePathLocal, fileNameLocal, fileNameFullRemote);
+			}
 			cAllFiles.moveToNext();
 		}
 		MediaFilesDB.getDBStatistics();
@@ -1355,10 +1362,16 @@ public class PicSync extends IntentService {
 		MediaFilesDB.updateFileHashOfAllFiles();
 
 		broadcastCurrTask(stateCurrTaskDescription="Scanning remote files");
+		if (dbRemoteFiles == null)
+			scanCIFSFilesWithSizeIntoDB(tgtNASPath);
+		if (dbRemoteFiles == null)
+			return;
+/*
 		if (listOfNASFiles == null)
 			listOfNASFiles = listNASFilesWithSize(tgtNASPath);
 		if (listOfNASFiles == null)
 			return;
+*/
 		Integer listOfNASFilesSize = listOfNASFiles.size();
 		Log.d(LOG_TAG,"Found NAS files: "+listOfNASFilesSize);
 
@@ -1461,19 +1474,6 @@ public class PicSync extends IntentService {
 		return true;
 	}
 
-	private void initializeMD5(){
-		if (digestMD5!=null) {
-			digestMD5.reset();
-			return;
-		}
-		try {
-			digestMD5 = MessageDigest.getInstance("MD5");
-		} catch (NoSuchAlgorithmException e) {
-			Log.e(TAG, "Exception while getting digest", e);
-			digestMD5=null;
-		}
-
-	}
 	private boolean copyFileToNAS(String src, String tgt, long timestamp) {
 		PowerManager.WakeLock wakeLock=null;
 		if (!prefEnabledWakeLockCopy){
@@ -1526,18 +1526,23 @@ public class PicSync extends IntentService {
 					}
 			}
 			tgtFileStreamTMP = new SmbFileOutputStream(tgtFileTMP);
+/*
 			if (cksumEnabled)
 				initializeMD5();
+*/
 			int read = 0;
 			long read_total = 0;
 			while (((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) && !stateCopyPaused && PicSyncState == ePicSyncState.PIC_SYNC_STATE_SYNCING) {
 				read_total += read;
+/*
 				if (cksumEnabled && read_total < cksumMaxBytes)
 					digestMD5.update(buffer, 0, read);
+*/
 				tgtFileStreamTMP.write(buffer, 0, read);
 			}
 			if (PicSyncState != ePicSyncState.PIC_SYNC_STATE_SYNCING || stateCopyPaused)
 				throw new InterruptedException("InterruptedException");
+/*
 			if (cksumEnabled) {
 				md5sumBytes = digestMD5.digest();
 				for (int i=0; i < md5sumBytes.length; i++)
@@ -1545,6 +1550,7 @@ public class PicSync extends IntentService {
 				Log.d("copyFileToNAS","md5sum " + md5sum);
 				cksumGlobalVariable=md5sum;
 			}
+*/
 			srcFile = new File(src);
 			long srcFileSize = srcFile.length();
 			if (srcFileSize != read_total)
@@ -1855,41 +1861,6 @@ public class PicSync extends IntentService {
 		MediaFilesDB(Context ctx) {
 			super(ctx, DATABASE_NAME, null, DATABASE_VERSION);
 		}
-
-		private String makeHash(String srcFile) {
-			FileInputStream srcFileStream;
-			try {
-				srcFileStream = new FileInputStream(srcFile);
-			} catch (FileNotFoundException e) {
-				e.printStackTrace();
-				return null;
-			}
-			int read = 0;
-			long read_total = 0;
-			final byte[] buffer = new byte[256 * 1024];
-			byte[] md5sumBytes;
-			String md5sum = new String();
-			MessageDigest digestMD5 = null;
-			try {
-				digestMD5 = MessageDigest.getInstance("MD5");
-				try {
-					while (((read = srcFileStream.read(buffer, 0, buffer.length)) > 0) && (read_total<cksumMaxBytes)) {
-						read_total += read;
-						digestMD5.update(buffer, 0, read);
-					}
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-
-				md5sumBytes = digestMD5.digest();
-				for (int i = 0; i < md5sumBytes.length; i++)
-					md5sum += Integer.toString((md5sumBytes[i] & 0xff) + 0x100, 16).substring(1);
-			} catch (NoSuchAlgorithmException e) {
-				e.printStackTrace();
-			}
-//			Log.d("makeHash", srcFile + " md5sum: " + md5sum);
-			return md5sum;
-		}
 		public void updateFileHashOfAllFiles(){
 			db = getReadableDatabase();
 			Cursor cChkFile;
@@ -1915,7 +1886,7 @@ public class PicSync extends IntentService {
 					int colSRCPATH = cChkFile.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
 					int colSRCFILE = cChkFile.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
 					String fileNameFull = cChkFile.getString(colSRCPATH) + File.separator + cChkFile.getString(colSRCFILE);
-					String md5sum = makeHash(fileNameFull);
+					String md5sum = Utils.makeFileFingerprint(fileNameFull);
 					ContentValues newHashValues = new ContentValues();
 					newHashValues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_MD5, md5sum);
 					newHashValues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_MD5_LENGTH, cksumMaxBytes);
@@ -1935,7 +1906,18 @@ public class PicSync extends IntentService {
 					db.close();
 			}
 		}
-		public void updateExifHashOfAllFiles(){
+		public void updateMetadataHashOfFile(String filePath, String fileName, String fileMetadataHash){
+			String fileNameFull = filePath + File.separator + fileName;
+			ContentValues newHashValues = new ContentValues();
+			newHashValues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT, fileMetadataHash);
+			newHashValues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT_TYPE, Constants.MediaFilesDBEntry_FINGERPRINT_TYPE);
+			String where = Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + "=\"" +  filePath + "\""
+								   + " and "
+								   + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + fileName + "\"";
+			db.update(Constants.MediaFilesDBEntry.TABLE_NAME, newHashValues, where, null);
+			Log.d("updateFileHash", fileNameFull + " exifHash: " + fileMetadataHash);
+		}
+		public void updateMetadataHashOfAllFiles(){
 			db = getReadableDatabase();
 			Cursor cChkFile;
 			if (db == null)
@@ -1946,26 +1928,26 @@ public class PicSync extends IntentService {
 				cChkFile = db.rawQuery("select " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE
 								+ " from " + Constants.MediaFilesDBEntry.TABLE_NAME
 								+ " where "
-								+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH + "=\"" + 0 + "\""
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT + "=\"" + 0 + "\""
 								+ " or "
-								+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH + " is null "
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT + " is null "
 								+ " or "
-								+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASHTYPE + "!=\"" + Constants.MediaFilesDBEntry_EXIF_HASHTYPE + "\""
+								+ Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT_TYPE + "!=\"" + Constants.MediaFilesDBEntry_FINGERPRINT_TYPE + "\""
 						, null);
 				cChkFile.moveToFirst();
 				while (!cChkFile.isAfterLast()) {
 					int colSRCPATH = cChkFile.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
 					int colSRCFILE = cChkFile.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
-					String fileNameFull = cChkFile.getString(colSRCPATH) + File.separator + cChkFile.getString(colSRCFILE);
-					String exifHash = makeEXIFHash(fileNameFull);
-					ContentValues newHashValues = new ContentValues();
-					newHashValues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH, exifHash);
-					newHashValues.put(Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASHTYPE, Constants.MediaFilesDBEntry_EXIF_HASHTYPE);
-					String where = Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH + "=\"" +  cChkFile.getString(colSRCPATH) + "\""
-							+ " and "
-							+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE + "=\"" + cChkFile.getString(colSRCFILE) + "\"";
-					db.update(Constants.MediaFilesDBEntry.TABLE_NAME, newHashValues, where, null);
-					Log.d("updateFileHash", fileNameFull + " exifHash: " + exifHash);
+					String filePath = cChkFile.getString(colSRCPATH);
+					String fileName = cChkFile.getString(colSRCFILE);
+					String fileNameFull = filePath + File.separator + fileName;
+					String fileType = getFileType(fileNameFull);
+					String fileMetadataHash = null;
+					if ( fileType.equals(FILE_TYPE_PICTURE))
+						fileMetadataHash = Utils.makeEXIFHash(fileNameFull);
+					else if ( fileType.equals(FILE_TYPE_VIDEO))
+						fileMetadataHash = Utils.makeFileFingerprint(fileNameFull);
+					updateMetadataHashOfFile(filePath, fileName, fileMetadataHash);
 					cChkFile.moveToNext();
 				}
 				cChkFile.close();
@@ -1978,39 +1960,24 @@ public class PicSync extends IntentService {
 			}
 		}
 
-		String makeEXIFHash(String srcMediaFileNameFull){
-			ExifInterface exifInterface;
-			String exifDateTimeTaken;
-			String exifModel;
-			Integer exifISO,exifImageLength,exifImageWidth;
-			try {
-				exifInterface = new ExifInterface(srcMediaFileNameFull);
-				exifDateTimeTaken=exifInterface.getAttribute(TAG_DATETIME);
-				if (android.os.Build.VERSION.SDK_INT < 24)
-					exifISO=exifInterface.getAttributeInt(TAG_ISO,0);
-				else
-					exifISO=exifInterface.getAttributeInt(TAG_ISO_SPEED_RATINGS,0);
-				exifImageLength=exifInterface.getAttributeInt(TAG_IMAGE_LENGTH,0);
-				exifImageWidth=exifInterface.getAttributeInt(TAG_IMAGE_WIDTH,0);
-				exifModel=exifInterface.getAttribute(TAG_MODEL);
-				Double exifFocal=exifInterface.getAttributeDouble(TAG_FOCAL_LENGTH,0);
-				Double exifExposureTime=exifInterface.getAttributeDouble(TAG_EXPOSURE_TIME,0);
-				String exifHash =  exifModel+";"+exifDateTimeTaken+";"+exifISO.toString()+";"+exifImageLength.toString()+";"+exifImageWidth.toString()+";"+exifFocal.toString()+";"+exifExposureTime.toString();
-				MessageDigest digestMD5=null;
-				digestMD5 = MessageDigest.getInstance("MD5");
-				digestMD5.update(exifHash.getBytes(),0,exifHash.length());
-				byte [] md5sumBytes;
-				String md5sum = new String();
-				md5sumBytes = digestMD5.digest();
-				for (int i=0; i < md5sumBytes.length; i++)
-					md5sum += Integer.toString( ( md5sumBytes[i] & 0xff ) + 0x100, 16).substring( 1 );
-				Log.d(TAG,"md5sum of exifHash" + md5sum);
-				return md5sum;
-			} catch (IOException|NoSuchAlgorithmException e) {
-				e.printStackTrace();
-				return null;
-			}
+		private String getFileType(String fileNameFull) {
+			String suffix = fileNameFull.substring(fileNameFull.lastIndexOf("."));
+			if (suffix.endsWith("jpg")
+				|| suffix.endsWith("jpeg")
+				|| suffix.endsWith("png")
+				|| suffix.endsWith("raw")
+				)
+				return FILE_TYPE_PICTURE;
+			if (suffix.endsWith("mpg")
+				|| suffix.endsWith("mp4")
+				|| suffix.endsWith("avi")
+				)
+				return FILE_TYPE_VIDEO;
+			else return null;
 		}
+
+		private final String FILE_TYPE_PICTURE="Picture";
+		private final String FILE_TYPE_VIDEO="Video";
 		void insertSrcFile(String srcMediaFileNameFull) {
 			final String TAG="String";
 			db = getWritableDatabase();
@@ -2021,20 +1988,17 @@ public class PicSync extends IntentService {
 			ContentValues newMediaFile=null;
 			if (!containsSrcFile(srcMediaFilePath,srcMediaFileName)) {
 				Long lastModified = mediaFile.lastModified();
-/*
-				String exifHash = makeEXIFHash(srcMediaFileNameFull);
-*/
 				newMediaFile = new ContentValues();
 				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH, srcMediaFilePath);
 				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE, srcMediaFileName);
 				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS, lastModified);
 				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS, lastModified);
 /*
-				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH, exifHash);
+				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT, exifHash);
 */
 				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILESIZE, srcMediaFileSize);
 				if (cksumEnabled){
-					newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_MD5, makeHash(srcMediaFileNameFull));
+					newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_MD5, Utils.makeFileFingerprint(srcMediaFileNameFull));
 					newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_MD5_LENGTH, cksumMaxBytes);
 				}
 				mediaFilesScanned++;
@@ -2329,7 +2293,7 @@ public class PicSync extends IntentService {
 		}
 
 		public void onCreate(SQLiteDatabase db) {
-			Log.d("SQL","Creating db");
+			Log.d("SQL","Creating db "+DATABASE_NAME);
 			db.execSQL("drop table if exists " + Constants.MediaFilesDBEntry.TABLE_NAME);
 			final String TABLE_CREATE = "create table " + Constants.MediaFilesDBEntry.TABLE_NAME + "("
 					+ Constants.MediaFilesDBEntry.TABLE_NAME
@@ -2341,8 +2305,8 @@ public class PicSync extends IntentService {
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_MIN_FILE + " TEXT, "
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " INTEGER, "
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " TEXT, "
-					+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASH + " TEXT, "
-					+ Constants.MediaFilesDBEntry.COLUMN_NAME_EXIF_HASHTYPE + " INTEGER, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT + " TEXT, "
+					+ Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT_TYPE + " INTEGER, "
 					+ Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILESIZE + " INTEGER, "
 					+ "CONSTRAINT srcFile_unique UNIQUE (" + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH
 					+ "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE

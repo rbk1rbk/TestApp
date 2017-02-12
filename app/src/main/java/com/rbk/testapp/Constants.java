@@ -21,15 +21,24 @@ public final class Constants {
 		public static final String COLUMN_NAME_MIN_FILE = "minFileName";
 		public static final String COLUMN_NAME_TGT = "tgtFileNameFull";
 		public static final String COLUMN_NAME_SRC_TS = "timestamp";
-		public static final String COLUMN_NAME_EXIF_HASH = "exifHash";
-		public static final String COLUMN_NAME_EXIF_HASHTYPE = "exifHashType";
+		public static final String COLUMN_NAME_FINGERPRINT = "srcFileFingerprint";
+		public static final String COLUMN_NAME_FINGERPRINT_TYPE = "fingerprintType";
 /*
 		public static final String COLUMN_NAME_FILE_HASH = "srcFileHash";
 		public static final String COLUMN_NAME_FILE_HASH_SIZE = "srcFileHashSize";
 */
 		public static final String COLUMN_NAME_SRC_FILESIZE = "srcFileSize";
 	}
-	public static final Integer MediaFilesDBEntry_EXIF_HASHTYPE = 1;
+	public static class RemoteFilesDBEntry implements BaseColumns {
+		public static final String TABLE_NAME = "RemoteFiles";
+		public static final String COLUMN_NAME_PATH = "filePath";
+		public static final String COLUMN_NAME_FILE = "fileName";
+		public static final String COLUMN_NAME_FILESIZE = "fileSize";
+		public static final String COLUMN_NAME_TS = "fileTS";
+		public static final String COLUMN_NAME_FINGERPRINT = "fileFingerprint";
+	}
+	public static final Integer MediaFilesDBEntry_FINGERPRINT_TYPE = 2;
+	public static int cksumMaxBytes = 256 * 1024;
 
 
 }
