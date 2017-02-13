@@ -1,5 +1,6 @@
 package com.rbk.testapp;
 
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -47,5 +48,8 @@ public class AnyFileInputStream {
 			return sfis.read(b, off, len);
 		} else
 			return fis.read(b, off, len);
+	}
+	FileDescriptor getFD() throws IOException {
+		return fis.getFD();
 	}
 }

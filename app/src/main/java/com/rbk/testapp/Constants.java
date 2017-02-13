@@ -40,5 +40,7 @@ public final class Constants {
 	public static final Integer MediaFilesDBEntry_FINGERPRINT_TYPE = 2;
 	public static int cksumMaxBytes = 256 * 1024;
 
+	public static final String FILE_TYPE_PICTURE="Picture";
+	public static final String FILE_TYPE_VIDEO="Video";
 
 }

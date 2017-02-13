@@ -30,9 +30,32 @@ public class RemoteFilesDB extends SQLiteOpenHelper {
 		if (--dbOpened == 0)
 			db.close();
 	}
-	public static Cursor getFilesBySize(Long fileSize, Long sizeDiff){
-		//select * from files where COLUMN_NAME_FILESIZE > fileSize - sizeDiff && COLUMN_NAME_FILESIZE < fileSize + fileDiff
-		return null;
+	void updateFileFingerprint(String fileName, String fingerPrint){
+		db = getWritableDatabase();
+		ContentValues newFingerprint=new ContentValues();;
+		newFingerprint.put(Constants.RemoteFilesDBEntry.COLUMN_NAME_FINGERPRINT, fingerPrint);
+		String where = Constants.RemoteFilesDBEntry.COLUMN_NAME_FILE + "=\"" +  fileName + "\"";
+		db.update(Constants.RemoteFilesDBEntry.TABLE_NAME, newFingerprint, where, null);
+		if (--dbOpened == 0)
+			db.close();
+	}
+	public Cursor getFilesBySize(Long fileSize, Long sizeDiff){
+		db = getWritableDatabase();
+		Cursor cFilesBySize = db.rawQuery("select * from "
+												  + Constants.RemoteFilesDBEntry.TABLE_NAME
+												  + "where"
+												  + Constants.RemoteFilesDBEntry.COLUMN_NAME_FILESIZE
+												  + " > "
+												  + Long.toString(fileSize - sizeDiff)
+												  + " and "
+												  + Constants.RemoteFilesDBEntry.COLUMN_NAME_FILESIZE
+												  + " < "
+												  + Long.toString(fileSize + sizeDiff)
+
+				, null);
+		if (--dbOpened == 0)
+			db.close();
+		return cFilesBySize;
 	}
 	RemoteFilesDB(Context ctx) {
 		super(ctx, DATABASE_NAME, null, DATABASE_VERSION);
@@ -55,7 +78,6 @@ public class RemoteFilesDB extends SQLiteOpenHelper {
 											+ "," + Constants.RemoteFilesDBEntry.COLUMN_NAME_FILE + ")"
 											+ ")";
 		db.execSQL(TABLE_CREATE);
-
 	}
 
 	public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
@@ -66,6 +88,14 @@ public class RemoteFilesDB extends SQLiteOpenHelper {
 		onUpgrade(db, oldVersion, newVersion);
 	}
 
+	public int size(){
+		db = getWritableDatabase();
+		Cursor c = db.rawQuery("select count(*) from "+ Constants.RemoteFilesDBEntry.TABLE_NAME,null);
+		c.moveToFirst();
+		if (--dbOpened == 0)
+			db.close();
+		return (c.getInt(0));
+	}
 	@Override
 	public void onOpen(SQLiteDatabase db) {
 		super.onOpen(db);

@@ -148,15 +148,15 @@ public class Utils {
 			md5sum += Integer.toString((md5sumBytes[i] & 0xff) + 0x100, 16).substring(1);
 		return md5sum;
 	}
-
 	static String makeEXIFHash(String srcMediaFileNameFull){
-		return makeEXIFHashFromStream(srcMediaFileNameFull);
-	}
-	private static String makeEXIFHashFromStream(String srcMediaFileNameFull){
 		ExifInterface exifInterface;
 		String exifDateTimeTaken;
 		String exifModel;
 		Integer exifISO,exifImageLength,exifImageWidth;
+		boolean fileIsRemote=false;
+		boolean err=false;
+		String exifHash=null;
+
 		try {
 			exifInterface = new ExifInterface(srcMediaFileNameFull);
 			exifDateTimeTaken=exifInterface.getAttribute(TAG_DATETIME);
@@ -169,7 +169,7 @@ public class Utils {
 			exifModel=exifInterface.getAttribute(TAG_MODEL);
 			Double exifFocal=exifInterface.getAttributeDouble(TAG_FOCAL_LENGTH,0);
 			Double exifExposureTime=exifInterface.getAttributeDouble(TAG_EXPOSURE_TIME,0);
-			String exifHash =  exifModel+";"+exifDateTimeTaken+";"+exifISO.toString()+";"+exifImageLength.toString()+";"+exifImageWidth.toString()+";"+exifExposureTime.toString();
+			exifHash =  exifModel+";"+exifDateTimeTaken+";"+exifISO.toString()+";"+exifImageLength.toString()+";"+exifImageWidth.toString()+";"+exifExposureTime.toString();
 /*
 				MessageDigest digestMD5=null;
 				digestMD5 = MessageDigest.getInstance("MD5");
@@ -182,11 +182,25 @@ public class Utils {
 				Log.d(TAG,"md5sum of exifHash" + md5sum);
 				return md5sum;
 */
-			return exifHash;
 		} catch (IOException e) {
 			e.printStackTrace();
-			return null;
 		}
+		return exifHash;
+	}
+	public static String getFileType(String fileNameFull) {
+		String suffix = fileNameFull.substring(fileNameFull.lastIndexOf("."));
+		if (suffix.endsWith("jpg")
+					|| suffix.endsWith("jpeg")
+					|| suffix.endsWith("png")
+					|| suffix.endsWith("raw")
+				)
+			return Constants.FILE_TYPE_PICTURE;
+		if (suffix.endsWith("mpg")
+					|| suffix.endsWith("mp4")
+					|| suffix.endsWith("avi")
+				)
+			return Constants.FILE_TYPE_VIDEO;
+		else return null;
 	}
 
 }
