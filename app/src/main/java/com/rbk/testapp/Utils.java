@@ -188,7 +188,7 @@ public class Utils {
 		return exifHash;
 	}
 	public static String getFileType(String fileNameFull) {
-		String suffix = fileNameFull.substring(fileNameFull.lastIndexOf("."));
+		String suffix = fileNameFull.substring(fileNameFull.lastIndexOf(".")).toLowerCase();
 		if (suffix.endsWith("jpg")
 					|| suffix.endsWith("jpeg")
 					|| suffix.endsWith("png")
