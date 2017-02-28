@@ -1108,6 +1108,16 @@ public class PicSync extends IntentService{
 		return fileListToSync;
 	}
 
+	private boolean fileIsInConfiguredLocation(String fileNameFull){
+		Set<String> prefFolderList  = settings.getStringSet("prefFolderList",null);
+		if (prefFolderList == null)
+			return false;
+		for (String mediaPath : prefFolderList){
+			if (fileNameFull.startsWith(mediaPath))
+				return true;
+		}
+		return false;
+	}
 	private void scanMediaFilesFromUri(String uriString) {
 		if (uriString == null)
 			return;
@@ -1127,20 +1137,17 @@ public class PicSync extends IntentService{
 			PicSyncState = ePicSyncState.PIC_SYNC_STATE_SCANNING;
 			while (!cursor.isAfterLast()) {
 				String srcFile = cursor.getString(colidData);
-				if (!MediaFilesDB.containsSrcFile(srcFile))
-					paths.add(srcFile);
-				cursor.moveToNext();
-			}
-			cursor.close();
-			if (!paths.isEmpty()) {
-				for (String srcFileNameFull : paths) {
-					String srcFileNameFullCanonical = new File(srcFileNameFull).getCanonicalPath().toString();
+				//TODO: overit, ci sa skenovany subor nachadza pod konfigurovanou cestou
+				String srcFileNameFullCanonical = new File(srcFile).getCanonicalPath().toString();
+				if (fileIsInConfiguredLocation(srcFileNameFullCanonical) && !MediaFilesDB.containsSrcFile(srcFile)){
 					MediaFilesDB.insertSrcFile(srcFileNameFullCanonical);
 					mediaFilesScanned++;
 				}
-				MediaFilesDB.getDBStatistics();
-				broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
+				cursor.moveToNext();
 			}
+			cursor.close();
+			MediaFilesDB.getDBStatistics();
+			broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 		} catch (Exception e) {
 			Log.d("getImagePath: uri:", uri.toString());
 			e.getMessage();
@@ -1234,7 +1241,7 @@ public class PicSync extends IntentService{
 						dbRemoteFiles = new RemoteFilesDB(myContext);
 					dbRemoteFiles.addFile(fileName,fileSize);
 					count++;
-					Log.d("listNASFilesWithSize","Found "+fileName+" of size "+fileSize);
+//					Log.d("listNASFilesWithSize","Found "+fileName+" of size "+fileSize);
 				}
 			} catch (SmbException e) {
 				e.printStackTrace();
@@ -1318,7 +1325,16 @@ public class PicSync extends IntentService{
 			String fileNameFullLocal = filePathLocal + File.separator + fileNameLocal;
 
 			Log.d(LOG_TAG, "Searching for remote copy of " + fileNameFullLocal + " / " + fileSizeLocal);
-			Cursor cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal,2*1024L);
+			String fileTYpeLocal = Utils.getFileType(fileNameFullLocal);
+			if (fileTYpeLocal == null)
+				continue;
+			Cursor cSimilarRemoteFiles;
+			if (fileTYpeLocal.equals(Constants.FILE_TYPE_PICTURE)) {
+				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal,2*1024L);
+			} else if (fileTYpeLocal.equals(Constants.FILE_TYPE_VIDEO))
+				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal,0L);
+			else
+				return;
 			cSimilarRemoteFiles.moveToFirst();
 			int colRemoteFileName=0;
 //			int colRemoteFileSize=0;
@@ -1334,16 +1350,16 @@ public class PicSync extends IntentService{
 					fileHashRemote = cSimilarRemoteFiles.getString(colRemoteFileHash);
 					remoteFileNameFull = cSimilarRemoteFiles.getString(colRemoteFileName);
 					if (fileHashRemote == null || fileHashRemote.equals("")) {
-						String fileType = Utils.getFileType(remoteFileNameFull);
-						if (fileType == null)
-							return;
-						if (fileType.equals(Constants.FILE_TYPE_PICTURE)) {
+						String fileTypeRemote = Utils.getFileType(remoteFileNameFull);
+						if (fileTypeRemote == null)
+							continue;
+						if (fileTypeRemote.equals(Constants.FILE_TYPE_PICTURE)) {
 							String localEXIFFileCache = copyEXIFHeaderLocally(remoteFileNameFull);
 							if (localEXIFFileCache == null)
-								return;
+								continue;
 							fileHashRemote = Utils.makeEXIFHash(localEXIFFileCache);
 							new File(localEXIFFileCache).delete();
-						} else if (fileType.equals(Constants.FILE_TYPE_VIDEO))
+						} else if (fileTypeRemote.equals(Constants.FILE_TYPE_VIDEO))
 							fileHashRemote = Utils.makeFileFingerprint(remoteFileNameFull, auth);
 						dbRemoteFiles.updateFileFingerprint(remoteFileNameFull, fileHashRemote);
 					}
@@ -1356,6 +1372,7 @@ public class PicSync extends IntentService{
 				String fileNameFullRemote=cSimilarRemoteFiles.getString(colRemoteFileName);
 				Log.d(LOG_TAG, "Identical files: " + fileNameFullLocal + " and " + fileNameFullRemote);
 				MediaFilesDB.updateTgtFileName(filePathLocal, fileNameLocal, fileNameFullRemote);
+				broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, --mediaFilesCountToSync);
 			}
 			cAllLocalFiles.moveToNext();
 			cSimilarRemoteFiles.close();
@@ -1495,12 +1512,12 @@ public class PicSync extends IntentService{
 		}
 		try {
 			NASService.openConnection();
-			Log.i("PicSync", "Opening file: " + remoteFileName);
+//			Log.i("PicSync", "Opening file: " + remoteFileName);
 			sfile = new SmbFile(remoteFileName, auth);
 			in = new SmbFileInputStream(sfile);
 		} catch (IOException e) {
 			e.printStackTrace();
-			Log.i("PicSync", "File NOT opened " + e.getMessage());
+//			Log.i("PicSync", "File NOT opened " + e.getMessage());
 			return null;
 		}
 
@@ -1860,6 +1877,7 @@ public class PicSync extends IntentService{
 		broadcastConnectionStatus();
 	}
 
+/*
 	public void readTestFile() {
 		SmbFile sfile;
 		SmbFileInputStream in;
@@ -1894,6 +1912,7 @@ public class PicSync extends IntentService{
 			e.printStackTrace();
 		}
 	}
+*/
 
 	private void doNotify(){
 		NotificationCompat.Builder mBuilder =
@@ -2397,7 +2416,7 @@ public class PicSync extends IntentService{
 			synchronized (this) {
 				dbOpened++;
 			}
-			Log.d("onOpen "+db.toString(),Integer.toString(dbOpened));
+//			Log.d("onOpen "+db.toString(),Integer.toString(dbOpened));
 		}
 
 		public void openDBRW() {

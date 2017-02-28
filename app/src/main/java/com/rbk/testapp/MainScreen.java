@@ -1,6 +1,7 @@
 package com.rbk.testapp;
 
 import android.Manifest;
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -41,6 +42,7 @@ import java.util.Map;
 import static android.R.color.holo_green_light;
 import static android.R.color.holo_orange_dark;
 import static android.os.Environment.getExternalStorageDirectory;
+import static com.rbk.testapp.PicSyncScheduler.INTENT_EXTRA_SENDER;
 
 public class MainScreen extends AppCompatActivity {
 	private static final int mId=1;
@@ -310,7 +312,7 @@ public class MainScreen extends AppCompatActivity {
 	protected void onStart() {
 		Log.i("MainScreen", "onStart called");
 		super.onStart();
-/*
+
 		ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
 		boolean servicePicSyncSchedulerRunning = false;
 		for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
@@ -322,7 +324,7 @@ public class MainScreen extends AppCompatActivity {
 			intent.putExtra(INTENT_EXTRA_SENDER,this.getClass().getSimpleName());
 			startService(intent);
 		}
-*/
+
 	}
 
 	@Override
