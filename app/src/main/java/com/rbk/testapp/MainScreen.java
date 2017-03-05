@@ -323,6 +323,11 @@ public class MainScreen extends AppCompatActivity {
 			Intent intent = new Intent(this, PicSyncScheduler.class);
 			intent.putExtra(INTENT_EXTRA_SENDER,this.getClass().getSimpleName());
 			startService(intent);
+			myContext.startService(new Intent(MainScreen.this, PicSync.class)
+					.setAction(PicSync.ACTION_SUGGEST_MEDIA_SCAN)
+					.putExtra("cmdTimestamp", new Date().getTime())
+			);
+
 		}
 
 	}

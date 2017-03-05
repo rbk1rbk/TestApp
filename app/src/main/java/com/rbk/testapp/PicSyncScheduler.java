@@ -416,12 +416,16 @@ public class PicSyncScheduler extends Service {
 		}
 	}
 	private void finishServiceInitialization(){
-/*
+
+		/* Nema zmysel tu kontrolovat siet
+		Ak bol service nastartovany z MainScreen, ten zavola aj media Scan
+		Ak bol service nastartovany po boote, pride k nemu aj Wifi intent.
 		verifyWifiConnection(null);
 		if (!onHomeWifi)
 			broadcastInitialMediaScan();
-		broadcastWifiState();
-*/
+//		broadcastWifiState();
+		 */
+
 		setupReceivers();
 		if (binderPicSyncScheduler == null)
 			binderPicSyncScheduler = new LocalBinder();
@@ -483,8 +487,6 @@ public class PicSyncScheduler extends Service {
 				isConnected_Old=isConnected;
 			}
 
-		} else {
-			Log.d("PicSyncScheduler", "Who is calling me now?");
 		}
 		if (wakeLock != null)
 			wakeLock.release();
@@ -520,6 +522,6 @@ public class PicSyncScheduler extends Service {
 		if (isChangeInMediaFoldersRegistered)
 			this.getContentResolver().unregisterContentObserver(newMediaObserver);
 		settings.unregisterOnSharedPreferenceChangeListener(prefChangeListener);
-
+		Log.d("PicSyncScheduler","Destroyed");
 	}
 }

@@ -1,6 +1,7 @@
 package com.rbk.testapp;
 
 import android.Manifest;
+import android.app.AlarmManager;
 import android.app.IntentService;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -64,6 +65,8 @@ import jcifs.smb.SmbFileFilter;
 import jcifs.smb.SmbFileInputStream;
 import jcifs.smb.SmbFileOutputStream;
 
+import static android.app.AlarmManager.INTERVAL_HALF_HOUR;
+import static android.app.AlarmManager.RTC_WAKEUP;
 import static java.lang.Thread.sleep;
 
 public class PicSync extends IntentService{
@@ -154,6 +157,10 @@ public class PicSync extends IntentService{
 
 	private List listCifsBrowser;
 	private long lastSuggestMediaScanTimestamp=0;
+
+	private AlarmManager alarmMgr = null;
+	private PendingIntent alarmIntent;
+
 
 	class NASFileMetadataStruct{
 		String fileNameFull;
@@ -1684,6 +1691,9 @@ public class PicSync extends IntentService{
 		final String LOG_TAG="DoSyncFromDB";
 		PowerManager.WakeLock wakeLock=null;
 		WifiManager.WifiLock wifiLock = null;
+		Cursor cToSync = MediaFilesDB.getUnsyncedFiles();
+		if (cToSync == null)
+			return;
 		if (prefEnabledWakeLockCopy){
 			PowerManager powerManager = (PowerManager) myContext.getSystemService(POWER_SERVICE);
 			WifiManager wifiManager = (WifiManager) myContext.getSystemService(WIFI_SERVICE);
@@ -1702,9 +1712,6 @@ public class PicSync extends IntentService{
 				}
 			}
 		}
-		Cursor cToSync = MediaFilesDB.getUnsyncedFiles();
-		if (cToSync == null)
-			return;
 		cToSync.moveToFirst();
 		int colSRCPATH = cToSync.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
 		int colSRCFILE = cToSync.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
@@ -1720,7 +1727,7 @@ public class PicSync extends IntentService{
 			String tgtFileNameFull = constructNASPath(srcFilePath, srcFileName, srcFileTimestamp);
 			Log.d("DoSyncFromDB copy to  ",tgtFileNameFull);
 			if (tgtFileNameFull == null) {
-				return;
+				break;
 			}
 			if (!constructNASPathErrorFileExist) {
 				broadcastCopyInProgress(srcFileName, tgtFileNameFull);
@@ -1783,17 +1790,32 @@ public class PicSync extends IntentService{
 		MediaFilesDB.getDBStatistics();
 		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
 	}
+	private void setupAlarm(){
 
+		alarmMgr = (AlarmManager)myContext.getSystemService(Context.ALARM_SERVICE);
+		Intent intent = new Intent(myContext, PicSync.class)
+				.setAction(PicSync.ACTION_STOP_SYNC)
+				.putExtra("cmdTimestamp", new Date().getTime());
+		alarmIntent = PendingIntent.getBroadcast(myContext, 0, intent, 0);
+		alarmMgr.setInexactRepeating(RTC_WAKEUP,new Date().getTime(),INTERVAL_HALF_HOUR,alarmIntent);
+		alarmMgr.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,10000,alarmIntent);
+	}
+	private void cancelAlarm(){
+		if (alarmMgr==null)
+			return;
+		alarmMgr.cancel(PendingIntent.getBroadcast(myContext, 0, new Intent(myContext, PicSync.class),0));
+	}
 	private void handleActionStartSync(String flags) {
 		final String LOG_TAG="handleActionStartSync";
 		boolean doit = false;
 		Log.d(LOG_TAG,"beginning");
 		if (tgtNASPath == null || tgtNASPath.length()==0) {
 			tgtNASPath = settings.getString("prefsSMBURI", null);
-			if (tgtNASPath == null)
+			if (tgtNASPath == null) {
 				broadcastCurrTask(stateCurrTaskDescription = "SMB is not configured yet.");
-				Log.d(LOG_TAG,stateCurrTaskDescription);
+				Log.d(LOG_TAG, stateCurrTaskDescription);
 				return;
+			}
 		}
 		stateCopyPaused=settings.getBoolean("statePicSyncCopyPaused", true);
 		if (stateCopyPaused) {
@@ -1833,9 +1855,11 @@ public class PicSync extends IntentService{
 			if (!stateNASConnected){
 				Log.d(LOG_TAG,"prefWoLAllowed: "+new Boolean(prefWoLAllowed).toString());
 				Log.d(LOG_TAG,"prefMACverified: "+new Boolean(prefMACverified).toString());
+				setupAlarm();
 			}
 			broadcastConnectionStatus();
 			if (stateNASConnected) {
+				cancelAlarm();
 				PicSyncState = ePicSyncState.PIC_SYNC_STATE_SYNCING;
 				broadcastCurrTask(stateCurrTaskDescription = "Copying files");
 				doNotify();
@@ -1917,7 +1941,7 @@ public class PicSync extends IntentService{
 	private void doNotify(){
 		NotificationCompat.Builder mBuilder =
 				new NotificationCompat.Builder(this)
-						.setSmallIcon(R.drawable.ic_notifications_black_24dp)
+						.setSmallIcon(R.drawable.ic_sync_black_24dp)
 						.setContentTitle("PicSync")
 						.setContentText(stateCurrTaskDescription);
 		Intent notifyIntent = new Intent(this, MainScreen.class);
@@ -2084,7 +2108,8 @@ public class PicSync extends IntentService{
 				} catch (Exception e) {
 					e.printStackTrace();
 					Log.d("insertSrcFile","dbOpened: "+dbOpened);
-					if (e.getMessage().equals("attempt to re-open an already-closed object")) {
+					if (e.getMessage().contains("attempt to re-open an already-closed object")) {
+						Log.d("insertSrcFile","Hacking 'already closed object' exception.");
 						db = getWritableDatabase();
 						db.insert(Constants.MediaFilesDBEntry.TABLE_NAME, null, newMediaFile);
 					}
@@ -2452,7 +2477,7 @@ public class PicSync extends IntentService{
 		public static boolean isHomeWifiConnected() {
 			boolean onHomeWifi, isConnected;
 			int connType;
-			WifiManager wifiManager = (WifiManager) MyContext.getSystemService(WIFI_SERVICE);
+			WifiManager wifiManager = (WifiManager) MyContext.getApplicationContext().getSystemService(WIFI_SERVICE);
 			ConnectivityManager cm = (ConnectivityManager) MyContext.getSystemService(Context.CONNECTIVITY_SERVICE);
 			NetworkInfo networkInfo = cm.getActiveNetworkInfo();
 			if (networkInfo == null)
@@ -2536,7 +2561,7 @@ public class PicSync extends IntentService{
 			SmbFile[] domains = null;
 			SmbFile domainsFile;
 			try {
-				domainsFile = new SmbFile("smb:///", auth);
+				domainsFile = new SmbFile(smbshareurl, auth);
 			} catch (MalformedURLException e) {
 				stateNASConnected = false;
 				throw e;
