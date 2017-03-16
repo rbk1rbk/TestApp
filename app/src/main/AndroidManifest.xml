@@ -14,7 +14,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application
         android:allowBackup="true"
@@ -29,7 +29,6 @@
         <activity
             android:name="com.google.android.gms.common.api.GoogleApiActivity"
             tools:node="remove"/>
-
         <activity android:name=".MainScreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -40,12 +39,10 @@
 
         <service
             android:name=".PicSync"
-            android:label="PicSync"
-            android:exported="false">
+            android:exported="false"
+            android:label="PicSync">
         </service>
-        <!--
-            android:process=":PicSync"
-        -->
+        <!--             android:process=":PicSync" -->
         <activity
             android:name=".SettingsActivity"
             android:label="@string/title_activity_settings"
@@ -61,7 +58,7 @@
             android:parentActivityName=".SettingsActivity"
             android:theme="@android:style/Theme.Holo.Light.Dialog">
 
-            <!--             android:theme="@style/AppTheme.WithActionBar" -->
+            <!-- android:theme="@style/AppTheme.WithActionBar" -->
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.rbk.testapp.SettingsActivity"/>
@@ -97,7 +94,6 @@
                 <action android:name="android.net.conn.CONNECTIVITY_CHANGE"/>
             </intent-filter>
         </receiver>
-
         <receiver
             android:name=".StartOnBoot"
             android:enabled="true"
@@ -106,6 +102,9 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </receiver>
+
+        <activity android:name=".MediaBrowser">
+        </activity>
     </application>
 
 </manifest>

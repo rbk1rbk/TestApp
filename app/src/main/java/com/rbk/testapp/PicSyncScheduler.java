@@ -475,6 +475,7 @@ public class PicSyncScheduler extends Service {
 		} else if (startId == 1) {
 			Log.d("PicSyncScheduler", "Service started by MainScreen");
 			finishServiceInitialization();
+			evaluateTheNeedOfSync();
 		}
 		if (intentSender.equals("WifiChangeReceiver")){
 			dumpIntent(intent);
