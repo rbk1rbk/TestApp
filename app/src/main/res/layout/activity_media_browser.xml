@@ -3,10 +3,12 @@
           android:id="@+id/gridviewMediaBrowser"
           android:layout_width="match_parent"
           android:layout_height="match_parent"
-          android:columnWidth="90dp"
-          android:numColumns="auto_fit"
-          android:verticalSpacing="10dp"
-          android:horizontalSpacing="10dp"
-          android:stretchMode="columnWidth"
+          android:columnWidth="120dp"
           android:gravity="center"
-    />
+          android:horizontalSpacing="10dp"
+          android:numColumns="auto_fit"
+          android:padding="12dp"
+          android:scrollbarSize="16dp"
+          android:scrollbars="horizontal|vertical"
+          android:stretchMode="columnWidth"
+          android:verticalSpacing="10dp"/>

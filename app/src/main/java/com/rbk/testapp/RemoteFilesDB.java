@@ -12,7 +12,7 @@ import android.util.Log;
  */
 
 public class RemoteFilesDB extends SQLiteOpenHelper {
-	static final int DATABASE_VERSION = 2;
+	static final int DATABASE_VERSION = 3;
 	static final String DATABASE_NAME = "RemoteFilesDB.db";
 	private static volatile int dbOpened = 0;
 	private static SQLiteDatabase db;
@@ -25,7 +25,7 @@ public class RemoteFilesDB extends SQLiteOpenHelper {
 		try {
 			db.insert(Constants.RemoteFilesDBEntry.TABLE_NAME, null, newRemoteFile);
 		} catch (Exception e) {
-			e.printStackTrace();
+//			e.printStackTrace();
 		}
 //		if (--dbOpened == 0)
 			db.close();
@@ -70,7 +70,9 @@ public class RemoteFilesDB extends SQLiteOpenHelper {
 											+ Constants.RemoteFilesDBEntry.COLUMN_NAME_FILE + " TEXT, "
 											+ Constants.RemoteFilesDBEntry.COLUMN_NAME_FINGERPRINT + " TEXT, "
 											+ Constants.RemoteFilesDBEntry.COLUMN_NAME_TS + " INTEGER, "
-											+ Constants.RemoteFilesDBEntry.COLUMN_NAME_FILESIZE + " INTEGER"
+											+ Constants.RemoteFilesDBEntry.COLUMN_NAME_FILESIZE + " INTEGER, "
+											+ "constraint remotefileUnique UNIQUE ("
+											+ Constants.RemoteFilesDBEntry.COLUMN_NAME_FILE + ")"
 											+ ")";
 		db.execSQL(TABLE_CREATE);
 	}

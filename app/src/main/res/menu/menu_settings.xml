@@ -10,27 +10,32 @@
         app:showAsAction="ifRoom"/>
     <item
         android:id="@+id/action_rescanNAS"
-        android:orderInCategory="101"
+        android:orderInCategory="200"
         android:title="Rescan NAS"
         app:showAsAction="ifRoom"/>
     <item
+        android:id="@+id/action_mediaBrowser"
+        android:orderInCategory="300"
+        android:title="Browse Media"
+        app:showAsAction="ifRoom"/>
+    <item
         android:id="@+id/action_syncnow"
-        android:orderInCategory="102"
+        android:orderInCategory="400"
         android:title="Sync now"
         app:showAsAction="never"/>
     <item
         android:id="@+id/action_export"
-        android:orderInCategory="103"
+        android:orderInCategory="500"
         android:title="Export settings"
         app:showAsAction="never"/>
     <item
         android:id="@+id/action_import"
-        android:orderInCategory="104"
+        android:orderInCategory="600"
         android:title="Import settings"
         app:showAsAction="never"/>
     <item
         android:id="@+id/action_exportDB"
-        android:orderInCategory="105"
+        android:orderInCategory="700"
         android:title="Export Database"
         app:showAsAction="never"/>
 <!--

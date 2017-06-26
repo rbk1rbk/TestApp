@@ -158,7 +158,16 @@ class MediaFilesDB extends SQLiteOpenHelper {
 			//TODO: ziskat z nastaveni
 			boolean cksumEnabled = true;
 			if (cksumEnabled){
-				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT, Utils.makeFileFingerprint(srcMediaFileNameFull));
+				String fileType = Utils.getFileType(srcMediaFileNameFull);
+				if (fileType == null)
+					return false;
+				String fileMetadataHash=null;
+				if ( fileType.equals(Constants.FILE_TYPE_PICTURE))
+					fileMetadataHash = Utils.makeEXIFHash(srcMediaFileNameFull);
+				else if ( fileType.equals(Constants.FILE_TYPE_VIDEO))
+					fileMetadataHash = Utils.makeFileFingerprint(srcMediaFileNameFull);
+
+				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT, fileMetadataHash);
 				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT_TYPE, Constants.MediaFilesDBEntry_FINGERPRINT_TYPE);
 /*
 					newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_MD5, Utils.makeFileFingerprint(srcMediaFileNameFull));
@@ -169,13 +178,14 @@ class MediaFilesDB extends SQLiteOpenHelper {
 				db.insert(Constants.MediaFilesDBEntry.TABLE_NAME, null, newMediaFile);
 				fileInserted=true;
 			} catch (Exception e) {
-				e.printStackTrace();
 				Log.d("insertSrcFile","dbOpened: "+dbOpened);
 				if (e.getMessage().contains("attempt to re-open an already-closed object")) {
 					Log.d("insertSrcFile","Hacking 'already closed object' exception.");
 					db = getWritableDatabase();
 					db.insert(Constants.MediaFilesDBEntry.TABLE_NAME, null, newMediaFile);
 				}
+				else
+					e.printStackTrace();
 			}
 		}
 		if (--dbOpened == 0)
@@ -343,14 +353,15 @@ class MediaFilesDB extends SQLiteOpenHelper {
 		if (db == null)
 			return null;
 		try {
-			cToSync = db.rawQuery("select "
-										  + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH
+			cToSync = db.rawQuery("select rowid  _id  "
+										  + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH
 										  + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE
 										  + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS
+										  + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT
 										  + " from " + Constants.MediaFilesDBEntry.TABLE_NAME
 										  + " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
 										  + " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
-										  + " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " asc "
+										  + " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " desc "
 					, null);
 			if (cToSync == null)
 				return null;
@@ -367,13 +378,13 @@ class MediaFilesDB extends SQLiteOpenHelper {
 		if (db == null)
 			return null;
 		try {
-			cAllFiles = db.rawQuery("select * "
+			cAllFiles = db.rawQuery("select rowid  _id,* "
 											+ " from " + Constants.MediaFilesDBEntry.TABLE_NAME
 /*
 											  + " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
 											  + " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
-											  + " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " desc "
 */
+											  + " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " desc "
 					, null);
 			if (cAllFiles == null)
 				return null;

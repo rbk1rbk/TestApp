@@ -1261,7 +1261,7 @@ public class PicSync extends IntentService{
 						dbRemoteFiles = new RemoteFilesDB(myContext);
 					dbRemoteFiles.addFile(fileName,fileSize);
 					count++;
-//					Log.d("listNASFilesWithSize","Found "+fileName+" of size "+fileSize);
+					Log.d("listNASFilesWithSize","Found "+fileName+" of size "+fileSize);
 				}
 			} catch (SmbException e) {
 				e.printStackTrace();
@@ -1324,7 +1324,7 @@ public class PicSync extends IntentService{
 		int remoteFilesFound=0;
 		if (dbRemoteFiles == null)
 			remoteFilesFound=scanCIFSFilesWithSizeIntoDB(tgtNASPath);
-		else
+//
 			remoteFilesFound=dbRemoteFiles.size();
 		if (dbRemoteFiles == null)
 			return;
@@ -1345,13 +1345,13 @@ public class PicSync extends IntentService{
 			String fileNameFullLocal = filePathLocal + File.separator + fileNameLocal;
 
 			Log.d(LOG_TAG, "Searching for remote copy of " + fileNameFullLocal + " / " + fileSizeLocal);
-			String fileTYpeLocal = Utils.getFileType(fileNameFullLocal);
-			if (fileTYpeLocal == null)
+			String fileTypeLocal = Utils.getFileType(fileNameFullLocal);
+			if (fileTypeLocal == null)
 				continue;
 			Cursor cSimilarRemoteFiles;
-			if (fileTYpeLocal.equals(Constants.FILE_TYPE_PICTURE)) {
-				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal,2*1024L);
-			} else if (fileTYpeLocal.equals(Constants.FILE_TYPE_VIDEO))
+			if (fileTypeLocal.equals(Constants.FILE_TYPE_PICTURE)) {
+				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal,8*1024L);
+			} else if (fileTypeLocal.equals(Constants.FILE_TYPE_VIDEO))
 				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal,0L);
 			else
 				return;
