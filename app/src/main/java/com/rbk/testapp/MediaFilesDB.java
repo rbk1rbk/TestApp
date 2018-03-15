@@ -2,9 +2,11 @@ package com.rbk.testapp;
 
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.preference.PreferenceManager;
 import android.util.Log;
 
 import java.io.File;
@@ -19,9 +21,11 @@ class MediaFilesDB extends SQLiteOpenHelper {
 	private static volatile int dbOpened = 0;
 	private static SQLiteDatabase db;
 	private MediaFilesCallback callBack;
+	private static Context myContext;
 
 	MediaFilesDB(Context ctx) {
 		super(ctx, DATABASE_NAME, null, DATABASE_VERSION);
+		myContext=ctx;
 		callBack = null;
 	}
 
@@ -79,6 +83,7 @@ class MediaFilesDB extends SQLiteOpenHelper {
 				}
 			}
 	*/
+
 	public void updateMetadataHashOfFile(String filePath, String fileName, String fileMetadataHash){
 		String fileNameFull = filePath + File.separator + fileName;
 		ContentValues newHashValues = new ContentValues();
@@ -120,7 +125,7 @@ class MediaFilesDB extends SQLiteOpenHelper {
 				String fileMetadataHash = null;
 				if ( fileType.equals(Constants.FILE_TYPE_PICTURE))
 					fileMetadataHash = Utils.makeEXIFHash(fileNameFull);
-				else if ( fileType.equals(Constants.FILE_TYPE_VIDEO))
+				if ( fileType.equals(Constants.FILE_TYPE_VIDEO) || fileMetadataHash == null)
 					fileMetadataHash = Utils.makeFileFingerprint(fileNameFull);
 				updateMetadataHashOfFile(filePath, fileName, fileMetadataHash);
 				cChkFile.moveToNext();
@@ -162,9 +167,10 @@ class MediaFilesDB extends SQLiteOpenHelper {
 				if (fileType == null)
 					return false;
 				String fileMetadataHash=null;
-				if ( fileType.equals(Constants.FILE_TYPE_PICTURE))
+				if ( fileType.equals(Constants.FILE_TYPE_PICTURE)) {
 					fileMetadataHash = Utils.makeEXIFHash(srcMediaFileNameFull);
-				else if ( fileType.equals(Constants.FILE_TYPE_VIDEO))
+				}
+				if ( (fileType.equals(Constants.FILE_TYPE_VIDEO)) || (fileMetadataHash==null))
 					fileMetadataHash = Utils.makeFileFingerprint(srcMediaFileNameFull);
 
 				newMediaFile.put(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT, fileMetadataHash);
@@ -344,23 +350,20 @@ class MediaFilesDB extends SQLiteOpenHelper {
 				}
 				return fileNameFull;
 			}*/
-	Cursor getUnsyncedFiles() {
+
+	Cursor getUnsyncedFiles(Long oldestPictureTimestamp) {
 		db = getWritableDatabase();
 		Cursor cToSync;
-/*
-		SQLiteDatabase db = MediaFilesDB.getWritableDatabase();
-*/
 		if (db == null)
 			return null;
 		try {
-			cToSync = db.rawQuery("select rowid  _id  "
-										  + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH
-										  + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE
-										  + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS
-										  + "," + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT
+			cToSync = db.rawQuery("select rowid  _id,* "
 										  + " from " + Constants.MediaFilesDBEntry.TABLE_NAME
-										  + " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
+										  + " where ( " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
 										  + " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
+										  + ")"
+										  + " and "
+										  + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " > " + oldestPictureTimestamp
 										  + " order by " + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " desc "
 					, null);
 			if (cToSync == null)
@@ -370,6 +373,9 @@ class MediaFilesDB extends SQLiteOpenHelper {
 			return null;
 		}
 		return cToSync;
+	}
+	Cursor getUnsyncedFiles() {
+		return getUnsyncedFiles(0L);
 	}
 	Cursor getAllFiles() {
 		db = getWritableDatabase();
@@ -450,10 +456,17 @@ class MediaFilesDB extends SQLiteOpenHelper {
 		int mediaFilesCountTotal = c.getInt(0);
 		c.close();
 
+		PreferenceManager.setDefaultValues(myContext, R.xml.pref_upload, false);
+		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(myContext);
+		Long oldestPictureTimestamp=settings.getLong("consistentSyncTimestamp",0);
+
 		Cursor cToSync = db.rawQuery("select count (*) from "
 											 + Constants.MediaFilesDBEntry.TABLE_NAME
-											 + " where " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
+											 + " where ( " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " = \"\""
 											 + " or " + Constants.MediaFilesDBEntry.COLUMN_NAME_TGT + " is null "
+											 + ")"
+											 + " and "
+											 + Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_TS + " > " + oldestPictureTimestamp
 				, null);
 		cToSync.moveToFirst();
 		int mediaFilesCountToSync = cToSync.getInt(0);

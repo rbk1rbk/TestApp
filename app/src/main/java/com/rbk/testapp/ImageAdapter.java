@@ -2,8 +2,9 @@ package com.rbk.testapp;
 
 import android.content.Context;
 import android.database.Cursor;
-import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.ThumbnailUtils;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -54,22 +55,42 @@ public class ImageAdapter extends CursorAdapter {
 
 	public void bindView(View convertView, Context context, Cursor cursor) {
 		ImageView imageView;
-		int picsize=240;
+		int picsize=180;
+		int padding=16;
 		imageView = (ImageView) convertView;
 		String filePath, fileName, fileFullPath, fileNameTGT;
 		filePath = mCursor.getString(colSRCPATH);
 		fileName = mCursor.getString(colSRCFILE);
 		fileNameTGT = mCursor.getString(colTGTFILE);
 		fileFullPath = filePath + File.separator + fileName;
-		imageView.setLayoutParams(new GridView.LayoutParams(picsize, picsize));
-		imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-		imageView.setPadding(8, 8, 8, 8);
-		imageView.setCropToPadding(true);
 		if (fileNameTGT == null || fileNameTGT.equals(""))
 			imageView.setBackgroundColor(android.R.color.holo_green_light);
 		else
 			imageView.setBackgroundColor(android.R.color.holo_red_light);
-//		imageView.setImageURI(Uri.fromFile(new File(fileFullPath)));
+		imageView.setLayoutParams(new GridView.LayoutParams(picsize, picsize));
+		imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+		imageView.setPadding(0, padding, 0, 0);
+		imageView.setImageLevel(2);
+		imageView.setCropToPadding(true);
+		Log.d("bindView: showing ",fileName);
+		//Systemove thumbnaily
+		if (Utils.getFileType(fileFullPath).equals(Constants.FILE_TYPE_PICTURE)) {
+			imageView.setImageBitmap(ThumbnailUtils.extractThumbnail(BitmapFactory.decodeFile(fileFullPath), picsize, picsize));
+		}
+		if (Utils.getFileType(fileFullPath).equals(Constants.FILE_TYPE_VIDEO)) {
+			imageView.setImageBitmap(ThumbnailUtils.createVideoThumbnail(fileFullPath,MediaStore.Images.Thumbnails.MICRO_KIND));
+		}
+
+//		imageView.setImageURI(Uri.withAppendedPath("",) fromFile(new File(fileFullPath)));
+
+/*
+		final String thumb_DATA = MediaStore.Images.Thumbnails.DATA;
+		final String thumb_IMAGE_ID = MediaStore.Images.Thumbnails.IMAGE_ID;
+*/
+
+
+/*
+//BitmatFactory sposob, generuje to thumbnaily
 		BitmapFactory.Options bo = new BitmapFactory.Options();
 		bo.inJustDecodeBounds = true;
 		BitmapFactory.decodeFile(fileFullPath,bo);
@@ -83,5 +104,6 @@ public class ImageAdapter extends CursorAdapter {
 		bo.inJustDecodeBounds = false;
 		Bitmap bf=BitmapFactory.decodeFile(fileFullPath,bo);
 		imageView.setImageBitmap(bf);
+*/
 	}
 }

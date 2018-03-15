@@ -38,6 +38,11 @@
         android:orderInCategory="700"
         android:title="Export Database"
         app:showAsAction="never"/>
+    <item
+        android:id="@+id/action_importDB"
+        android:orderInCategory="700"
+        android:title="Import Database"
+        app:showAsAction="never"/>
 <!--
     <item
         android:id="@+id/action_importDB"

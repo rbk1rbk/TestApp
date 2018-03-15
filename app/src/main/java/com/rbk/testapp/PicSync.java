@@ -75,6 +75,7 @@ public class PicSync extends IntentService{
 	static final String ACTION_DEL_MEDIA_FOLDERS_W_PICS = "PicSync.delMediaFolder";
 	static final String INTENT_PARAM_LOCAL_FOLDER = "PicSync.localFolder";
 	static final String ACTION_GET_STORAGE_PATHS = "PicSync.getAllExternalStoragePaths";
+	static final String ACTION_GET_STORAGE_PATHS_EACCESS = "PicSync.getAllExternalStoragePathsEACCESS";
 	static final String ACTION_GET_NAS_CONNECTION = "PicSync.getNASConnection";
 	static final String ACTION_SET_LAST_IMAGE_TIMESTAMP = "PicSync.setLastImageTimestamp";
 	static final String ACTION_UPDATE_WOL = "PicSync.updateWOL";
@@ -97,6 +98,8 @@ public class PicSync extends IntentService{
 	static boolean DEBUGdryRun = false;
 	static boolean preferenceInitialized = false;
 	static NtlmPasswordAuthentication auth = null;
+	static int scanCIFSFilesWithSizeIntoDBTotalCount=0;
+	static int scanCIFSFilesWithSizeIntoDBTotalCountLastPrint=0;
 
 	static String prefTGTFolderStructure, prefsSubfolderNameFormat, prefTGTRenameOption, prefTGTAlreadyExistsTest, prefTGTAlreadyExistsRename;
 	static boolean prefEnabledWakeLockCopy;
@@ -814,6 +817,8 @@ public class PicSync extends IntentService{
 				addMediaFoldersToSettings();
 				return;
 			}
+			if (ACTION_GET_STORAGE_PATHS_EACCESS.equals(action)) {
+			}
 			if (ACTION_GET_STORAGE_PATHS.equals(action)) {
 				if (!checkStoragePermission())
 					return;
@@ -821,6 +826,15 @@ public class PicSync extends IntentService{
 				Intent returnstoragePathsIntent = new Intent("storagePaths");
 				returnstoragePathsIntent.putExtra("storagePaths", storagePaths);
 				returnstoragePathsIntent.putExtra("cmdTimestamp", cmdTimestamp);
+				LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnstoragePathsIntent);
+			}
+			if (ACTION_GET_STORAGE_PATHS_EACCESS.equals(action)) {
+				getAllExternalStoragePaths();
+				Intent returnstoragePathsIntent = new Intent(ACTION_GET_STORAGE_PATHS_EACCESS);
+				if (storagePathsEACCESS != null) {
+					returnstoragePathsIntent.putExtra("storagePathsEACCESS", storagePathsEACCESS);
+					returnstoragePathsIntent.putExtra("cmdTimestamp", cmdTimestamp);
+				}
 				LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnstoragePathsIntent);
 				return;
 			}
@@ -845,6 +859,8 @@ public class PicSync extends IntentService{
 		LocalBroadcastManager.getInstance(this).sendBroadcastSync(returnMediaFoldersListIntent);
 	}
 
+
+	private String[] storagePathsEACCESS=null;
 	private String[] getAllExternalStoragePaths() {
 		final String LOG_TAG="getAllExtStgPaths";
 		String canonicalPath, aPath, absolutePath;
@@ -861,7 +877,7 @@ public class PicSync extends IntentService{
 					int needle = TextUtils.indexOf(canonicalPath, "/Android", 0);
 					canonicalPath = TextUtils.substring(canonicalPath, 0, needle);
 					storagePathsSet.add(canonicalPath);
-				} catch (IOException e) {
+				} catch (IOException|java.lang.NullPointerException e) {
 					Log.d(LOG_TAG, "externalMediaDir.getAbsolutePath()", e);
 					e.printStackTrace();
 				}
@@ -904,11 +920,15 @@ public class PicSync extends IntentService{
 //remove duplicate paths e.g. /storage/emulated/0
 
 		SortedSet<String> storagePathsSetVerified = new TreeSet<String>();
+		SortedSet<String> storagePathsEACCESSTree = new TreeSet<String>();
+
+		storagePathsEACCESS=null;
 		storagePathsSetVerified.addAll(storagePathsSet);
 		File testFile=null;
 		for (String storagePath2Check : storagePathsSet){
 			try {
 				Log.d(LOG_TAG,"Checking path "+storagePath2Check);
+				//search for a file, don't create one
 				String testFileName = storagePath2Check+"/storagetestfile";
 				testFile = new File(testFileName);
 				testFile.createNewFile();
@@ -925,10 +945,15 @@ public class PicSync extends IntentService{
 				testFile.delete();
 			} catch (IOException e) {
 				e.printStackTrace();
+				if (e.toString().contains("EACCES") && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)){
+					storagePathsEACCESSTree.add(storagePath2Check);
+				}
 				if ((testFile.exists()))
 					testFile.delete();
 			}
 		}
+		if (storagePathsEACCESSTree.size()>0)
+			storagePathsEACCESS=storagePathsEACCESSTree.toArray(new String[storagePathsEACCESSTree.size()]);
 		return storagePathsSetVerified.toArray(new String[storagePathsSetVerified.size()]);
 	}
 
@@ -1250,22 +1275,31 @@ public class PicSync extends IntentService{
 			return 0;
 
 		int count=0;
+		String fileName = null;
+		Long fileSize = 0L;
 		for (SmbFile entry : fileList) {
+			boolean isDirectory = false;
 			try {
-				if (entry.isDirectory()) {
-					count+=scanCIFSFilesWithSizeIntoDB(entry.getCanonicalPath());
-				} else {
-					Long fileSize=entry.length();
-					String fileName=entry.toString();
-//					if (dbRemoteFiles == null)
-						dbRemoteFiles = new RemoteFilesDB(myContext);
-					dbRemoteFiles.addFile(fileName,fileSize);
-					count++;
-					Log.d("listNASFilesWithSize","Found "+fileName+" of size "+fileSize);
-				}
+				isDirectory = entry.isDirectory();
+				fileSize = entry.length();
 			} catch (SmbException e) {
 				e.printStackTrace();
+				return 0;
 			}
+			if (isDirectory) {
+				count = scanCIFSFilesWithSizeIntoDB(entry.getCanonicalPath());
+			} else {
+				fileName = entry.toString();
+				dbRemoteFiles = new RemoteFilesDB(myContext);
+				dbRemoteFiles.addFile(fileName, fileSize);
+				count++;
+			}
+		}
+		scanCIFSFilesWithSizeIntoDBTotalCount+=count;
+		if (scanCIFSFilesWithSizeIntoDBTotalCount - scanCIFSFilesWithSizeIntoDBTotalCountLastPrint > 1000) {
+			scanCIFSFilesWithSizeIntoDBTotalCountLastPrint = scanCIFSFilesWithSizeIntoDBTotalCount;
+			Log.d("scanCIFSFilesWithSize", "Found " + scanCIFSFilesWithSizeIntoDBTotalCount + " files");
+			Log.d("listNASFilesWithSize", "Found " + fileName + " of size " + fileSize);
 		}
 		return count;
 	};
@@ -1306,81 +1340,147 @@ public class PicSync extends IntentService{
 		return NASFilesList;
 	}*/
 
-	private void scanCIFS4SyncedFilesByMetadata(){
-		final String LOG_TAG="scanCIFSByMeta";
+	private void scanCIFS4SyncedFilesByMetadata() {
+		final String LOG_TAG = "scanCIFSByMeta";
 		if (!NASService.checkConnection()) {
 			makeToast("NAS connection not available");
 			return;
 		}
+
+		PowerManager.WakeLock wakeLock = null;
+		WifiManager.WifiLock wifiLock = null;
+		if (prefEnabledWakeLockCopy) {
+			PowerManager powerManager = (PowerManager) myContext.getSystemService(POWER_SERVICE);
+			WifiManager wifiManager = (WifiManager) myContext.getSystemService(WIFI_SERVICE);
+			if (powerManager == null || wifiManager == null) {
+				Log.d(LOG_TAG, "PowerManager or WifiManager not available");
+			} else {
+				wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "DoSyncFromDB");
+				wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "DoSyncFromDB");
+				wakeLock.acquire();
+				wifiLock.acquire();
+				Log.d(LOG_TAG, "wake and WiFi lock acquired");
+				if (Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP_MR1) {
+					if (powerManager.isPowerSaveMode())
+						Log.d(LOG_TAG, "Super saver mode enabled, may work incorrectly.");
+				}
+			}
+		}
+
 		if (tgtNASPath == null) {
 			tgtNASPath = settings.getString("prefsSMBURI", null);
 			if (tgtNASPath.endsWith("/"))
 				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
 		}
-		broadcastCurrTask(stateCurrTaskDescription="Updating local fingerprints");
+		broadcastCurrTask(stateCurrTaskDescription = "Updating local fingerprints");
 		MediaFilesDB.updateMetadataHashOfAllFiles();
 
-		broadcastCurrTask(stateCurrTaskDescription="Scanning remote files");
-		int remoteFilesFound=0;
-		if (dbRemoteFiles == null)
-			remoteFilesFound=scanCIFSFilesWithSizeIntoDB(tgtNASPath);
-//
-			remoteFilesFound=dbRemoteFiles.size();
-		if (dbRemoteFiles == null)
-			return;
-		Log.d(LOG_TAG,"Found NAS files: "+remoteFilesFound);
+/*
+		broadcastCurrTask(stateCurrTaskDescription = "Cleaning remote file DB");
+		dbRemoteFiles = new RemoteFilesDB(myContext);
+		int oldSize = dbRemoteFiles.size();
+		Cursor cAllRemoteFiles = dbRemoteFiles.getAllFiles();
+		if (cAllRemoteFiles != null) {
+			cAllRemoteFiles.moveToFirst();
+			int colRemoteFileName = cAllRemoteFiles.getColumnIndex(Constants.RemoteFilesDBEntry.COLUMN_NAME_FILE);
+			while (!cAllRemoteFiles.isAfterLast()) {
+				String remoteFileNameFull = cAllRemoteFiles.getString(colRemoteFileName);
+				SmbFile remoteFile = null;
+				try {
+					remoteFile = new SmbFile(remoteFileNameFull, auth);
+					if (!remoteFile.exists()) {
+						dbRemoteFiles.delFile(remoteFileNameFull);
+						Log.d(LOG_TAG, "removing " + remoteFileNameFull);
+					}
+				} catch (MalformedURLException e) {
+					e.printStackTrace();
+				} catch (SmbException e) {
+					e.printStackTrace();
+				}
+				cAllRemoteFiles.moveToNext();
+			}
+			cAllRemoteFiles.close();
 
-		broadcastCurrTask(stateCurrTaskDescription="Comparing local w/ remote");
-		Cursor cAllLocalFiles = MediaFilesDB.getAllFiles();
+		}
+		Log.d(LOG_TAG, "old remote file DB size " + oldSize);
+		Log.d(LOG_TAG, "new remote file DB size " + dbRemoteFiles.size());
+*/
+
+		broadcastCurrTask(stateCurrTaskDescription = "Scanning remote files");
+		int remoteFilesFound = 0;
+		scanCIFSFilesWithSizeIntoDBTotalCount = 0;
+//		if (dbRemoteFiles == null)
+		scanCIFSFilesWithSizeIntoDB(tgtNASPath);
+		remoteFilesFound = dbRemoteFiles.size();
+
+		Log.d(LOG_TAG, "Found NAS files: " + remoteFilesFound);
+
+		broadcastCurrTask(stateCurrTaskDescription = "Comparing local w/ remote");
+//		Cursor cAllLocalFiles = MediaFilesDB.getAllFiles();
+		Cursor cAllLocalFiles = MediaFilesDB.getUnsyncedFiles(consistentSyncTimestamp);
 		cAllLocalFiles.moveToFirst();
 		int colSRCPATH = cAllLocalFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
 		int colSRCFILE = cAllLocalFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
 		int colSRCSIZE = cAllLocalFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILESIZE);
 		int colSRCHASH = cAllLocalFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_FINGERPRINT);
-		while (!cAllLocalFiles.isAfterLast()){
+		while (!cAllLocalFiles.isAfterLast()) {
 			Long fileSizeLocal = cAllLocalFiles.getLong(colSRCSIZE);
-			String filePathLocal=cAllLocalFiles.getString(colSRCPATH);
-			String fileNameLocal=cAllLocalFiles.getString(colSRCFILE);
-			String fileHashLocal=cAllLocalFiles.getString(colSRCHASH);
+			String filePathLocal = cAllLocalFiles.getString(colSRCPATH);
+			String fileNameLocal = cAllLocalFiles.getString(colSRCFILE);
+			String fileHashLocal = cAllLocalFiles.getString(colSRCHASH);
 			String fileNameFullLocal = filePathLocal + File.separator + fileNameLocal;
 
 			Log.d(LOG_TAG, "Searching for remote copy of " + fileNameFullLocal + " / " + fileSizeLocal);
 			String fileTypeLocal = Utils.getFileType(fileNameFullLocal);
-			if (fileTypeLocal == null)
+			if (fileTypeLocal == null) {
+				cAllLocalFiles.moveToNext();
 				continue;
+			}
 			Cursor cSimilarRemoteFiles;
 			if (fileTypeLocal.equals(Constants.FILE_TYPE_PICTURE)) {
-				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal,8*1024L);
+				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal, 1 * 1024L);
 			} else if (fileTypeLocal.equals(Constants.FILE_TYPE_VIDEO))
-				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal,0L);
-			else
-				return;
+				cSimilarRemoteFiles = dbRemoteFiles.getFilesBySize(fileSizeLocal, 0L);
+			else {
+				cAllLocalFiles.moveToNext();
+				continue;
+			}
 			cSimilarRemoteFiles.moveToFirst();
-			int colRemoteFileName=0;
+			int colRemoteFileName = 0;
 //			int colRemoteFileSize=0;
-			int colRemoteFileHash=0;
-			String fileHashRemote="";
+			int colRemoteFileHash = 0;
+			String fileHashRemote = "";
 			String remoteFileNameFull;
 			if (!cSimilarRemoteFiles.isAfterLast()) {
 				colRemoteFileName = cSimilarRemoteFiles.getColumnIndex(Constants.RemoteFilesDBEntry.COLUMN_NAME_FILE);
 //				colRemoteFileSize=cSimilarRemoteFiles.getColumnIndex(Constants.RemoteFilesDBEntry.COLUMN_NAME_FILESIZE);
 				colRemoteFileHash = cSimilarRemoteFiles.getColumnIndex(Constants.RemoteFilesDBEntry.COLUMN_NAME_FINGERPRINT);
 
-				while (!cSimilarRemoteFiles.isAfterLast() && !fileHashLocal.equals(fileHashRemote)) {
+				while (!cSimilarRemoteFiles.isAfterLast() && fileHashLocal != null && !fileHashLocal.equals(fileHashRemote)) {
 					fileHashRemote = cSimilarRemoteFiles.getString(colRemoteFileHash);
 					remoteFileNameFull = cSimilarRemoteFiles.getString(colRemoteFileName);
 					if (fileHashRemote == null || fileHashRemote.equals("")) {
 						String fileTypeRemote = Utils.getFileType(remoteFileNameFull);
-						if (fileTypeRemote == null)
+						if (fileTypeRemote == null) {
+							cSimilarRemoteFiles.moveToNext();
 							continue;
+						}
 						if (fileTypeRemote.equals(Constants.FILE_TYPE_PICTURE)) {
 							String localEXIFFileCache = copyEXIFHeaderLocally(remoteFileNameFull);
-							if (localEXIFFileCache == null)
+							if (localEXIFFileCache == null) {
+								Log.d("copyEXIFHeader", "removing " + remoteFileNameFull);
+								dbRemoteFiles.delFile(remoteFileNameFull);
+								cSimilarRemoteFiles.moveToNext();
 								continue;
+							}
 							fileHashRemote = Utils.makeEXIFHash(localEXIFFileCache);
 							new File(localEXIFFileCache).delete();
 						} else if (fileTypeRemote.equals(Constants.FILE_TYPE_VIDEO))
 							fileHashRemote = Utils.makeFileFingerprint(remoteFileNameFull, auth);
+						else {
+							cSimilarRemoteFiles.moveToNext();
+							continue;
+						}
 						dbRemoteFiles.updateFileFingerprint(remoteFileNameFull, fileHashRemote);
 					}
 					if (!fileHashLocal.equals(fileHashRemote)) {
@@ -1389,7 +1489,7 @@ public class PicSync extends IntentService{
 				}
 			}
 			if (fileHashLocal.equals(fileHashRemote)) {
-				String fileNameFullRemote=cSimilarRemoteFiles.getString(colRemoteFileName);
+				String fileNameFullRemote = cSimilarRemoteFiles.getString(colRemoteFileName);
 				Log.d(LOG_TAG, "Identical files: " + fileNameFullLocal + " and " + fileNameFullRemote);
 				MediaFilesDB.updateTgtFileName(filePathLocal, fileNameLocal, fileNameFullRemote);
 				broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, --mediaFilesCountToSync);
@@ -1398,93 +1498,19 @@ public class PicSync extends IntentService{
 			cSimilarRemoteFiles.close();
 		}
 		cAllLocalFiles.close();
+		dbRemoteFiles.close();
 		MediaFilesDB.getDBStatistics();
 		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
-		broadcastCurrTask(stateCurrTaskDescription="Idle");
+		broadcastCurrTask(stateCurrTaskDescription = "Idle");
 
-
-	}
-	private void scanCIFS4SyncedFilesByFilesize(){
-		final String LOG_TAG="scanCIFSByFilesize";
-		if (!NASService.checkConnection()) {
-			makeToast("NAS connection not available");
-			return;
+		if (wakeLock != null) {
+			Log.d("DoSyncFromDB", "wakeLock released");
+			wakeLock.release();
 		}
-		if (tgtNASPath == null) {
-			tgtNASPath = settings.getString("prefsSMBURI", null);
-			if (tgtNASPath.endsWith("/"))
-				tgtNASPath = tgtNASPath.substring(0, tgtNASPath.lastIndexOf("/"));
+		if (wifiLock != null) {
+			Log.d("DoSyncFromDB", "wifiLock released");
+			wifiLock.release();
 		}
-		scanMediaFilesToSync();
-		broadcastCurrTask(stateCurrTaskDescription="Updating local hashes");
-//		MediaFilesDB.updateFileHashOfAllFiles();
-		MediaFilesDB.updateMetadataHashOfAllFiles();
-
-		broadcastCurrTask(stateCurrTaskDescription="Scanning remote files");
-		int remoteFilesFound=0;
-		if (dbRemoteFiles == null)
-			remoteFilesFound=scanCIFSFilesWithSizeIntoDB(tgtNASPath);
-		else
-			remoteFilesFound=dbRemoteFiles.size();
-		if (dbRemoteFiles == null)
-			return;
-		Log.d(LOG_TAG,"Found NAS files: "+remoteFilesFound);
-
-		broadcastCurrTask(stateCurrTaskDescription="Comparing repositories");
-		Cursor cAllFiles = MediaFilesDB.getAllFiles();
-		cAllFiles.moveToFirst();
-		int colSRCPATH = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_PATH);
-		int colSRCFILE = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILE);
-		int colSRCSIZE = cAllFiles.getColumnIndex(Constants.MediaFilesDBEntry.COLUMN_NAME_SRC_FILESIZE);
-		while (!cAllFiles.isAfterLast()){
-			Long fileSizeLocal = cAllFiles.getLong(colSRCSIZE);
-			String filePathLocal=cAllFiles.getString(colSRCPATH);
-			String fileNameLocal=cAllFiles.getString(colSRCFILE);
-			String fileNameFullLocal = filePathLocal + File.separator + fileNameLocal;
-			Log.d(LOG_TAG, "Searching for remote copy of " + fileNameFullLocal + " / " + fileSizeLocal);
-			int index=0;
-			long fileSizeNAS=-1L;
-			//TODO: skontrolovat ten for cyklus, neskonci pri prvom najdenom NAS subore s danou velkostou?
-			for (fileSizeNAS = listOfNASFiles.get(index).fileSize; index < remoteFilesFound && fileSizeLocal != (fileSizeNAS = listOfNASFiles.get(index).fileSize); index++);
-/*
-				fileSizeNAS = listOfNASFiles.get(index).fileSize;
-				if (fileSizeLocal == fileSizeNAS)
-					break;
-			}
-*/
-			if (fileSizeLocal == fileSizeNAS) {
-				String fileNameFullRemote = listOfNASFiles.get(index).fileNameFull;
-				Log.d(LOG_TAG, "Identical files: " + fileNameFullLocal + " and " + fileNameFullRemote);
-				MediaFilesDB.updateTgtFileName(filePathLocal,fileNameLocal,fileNameFullRemote);
-			}
-			else
-				MediaFilesDB.updateTgtFileName(filePathLocal,fileNameLocal,null);
-			cAllFiles.moveToNext();
-		}
-/*
-
-		for (int index=0; index < remoteFilesFound; index++){
-			Long fileSizeNAS = listOfNASFiles.get(index).fileSize;
-			if (MediaFilesDB.containsSrcFileOfSize(fileSizeNAS)) {
-//				Log.d(LOG_TAG, "Some local file with size of " + fileSizeNAS + " already exists on NAS as " + listOfNASFiles.get(index).fileNameFull);
-				String fileNASName = listOfNASFiles.get(index).fileNameFull;
-				String fileHashNAS=makeHashNAS(fileNASName);
-				String localFile = MediaFilesDB.getSrcFileOfSizeAndHash(fileSizeNAS, fileHashNAS);
-				if (localFile != null)
-					Log.d(LOG_TAG, "Identical files: "+ localFile +" and " + fileNASName);
-			}
-*/
-/*
-			else
-				Log.d(LOG_TAG,"No local file exists with size of "+fileSizeNAS);
-*//*
-
-		}
-
-*/
-		MediaFilesDB.getDBStatistics();
-		broadcastMediaFilesCount(mediaFilesCountTotal, mediaFilesScanned, mediaFilesCountToSync);
-		broadcastCurrTask(stateCurrTaskDescription="Idle");
 	}
 	private int scanMediaFilesToSync() {
 		SmbFile tgtMediaFile;
@@ -1536,8 +1562,8 @@ public class PicSync extends IntentService{
 			sfile = new SmbFile(remoteFileName, auth);
 			in = new SmbFileInputStream(sfile);
 		} catch (IOException e) {
-			e.printStackTrace();
-//			Log.i("PicSync", "File NOT opened " + e.getMessage());
+//			e.printStackTrace();
+			Log.i("PicSync", "File NOT opened " + e.getMessage());
 			return null;
 		}
 
@@ -1674,7 +1700,8 @@ public class PicSync extends IntentService{
 			e.printStackTrace();
 			if (e.toString().contains("ENOENT"))
 				MediaFilesDB.removeSrcFile(src);
-			rc = false;
+			//if this file is missing, consider copying as OK
+			rc = true;
 		} catch (IOException e) {
 			e.printStackTrace();
 			rc = false;
@@ -1704,7 +1731,9 @@ public class PicSync extends IntentService{
 		final String LOG_TAG="DoSyncFromDB";
 		PowerManager.WakeLock wakeLock=null;
 		WifiManager.WifiLock wifiLock = null;
-		Cursor cToSync = MediaFilesDB.getUnsyncedFiles();
+		if (!preferenceInitialized)
+			initPreferences();
+		Cursor cToSync = MediaFilesDB.getUnsyncedFiles(settings.getLong("consistentSyncTimestamp",0));
 		if (cToSync == null)
 			return;
 		if (prefEnabledWakeLockCopy){
@@ -1734,8 +1763,16 @@ public class PicSync extends IntentService{
 			String srcFilePath = cToSync.getString(colSRCPATH);
 			String srcFileName = cToSync.getString(colSRCFILE);
 			String srcFileNameFull = srcFilePath + "/" + srcFileName;
-			Log.d("DoSyncFromDB copy from",srcFileNameFull);
 
+			if (! new File(srcFileNameFull).exists()){
+				//If the file doesn't exist anymore
+				Log.d("File not found",srcFileNameFull);
+				MediaFilesDB.removeSrcFile(srcFileNameFull);
+				cToSync.moveToNext();
+				continue;
+			}
+
+			Log.d("DoSyncFromDB copy from",srcFileNameFull);
 			long srcFileTimestamp = cToSync.getLong(colSRCTS);
 			String tgtFileNameFull = constructNASPath(srcFilePath, srcFileName, srcFileTimestamp);
 			Log.d("DoSyncFromDB copy to  ",tgtFileNameFull);

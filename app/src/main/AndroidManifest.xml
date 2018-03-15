@@ -29,7 +29,10 @@
         <activity
             android:name="com.google.android.gms.common.api.GoogleApiActivity"
             tools:node="remove"/>
-        <activity android:name=".MainScreen">
+        <activity
+            android:name=".MainScreen"
+            android:launchMode="singleTask"
+            >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
 

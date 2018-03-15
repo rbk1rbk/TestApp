@@ -22,6 +22,8 @@ public class MediaBrowser extends AppCompatActivity {
 		setContentView(R.layout.activity_media_browser);
 
 		GridView gridview = (GridView) findViewById(R.id.gridviewMediaBrowser);
+		gridview.setNumColumns(2);
+		gridview.getWidth();
 		MediaFilesDB = new MediaFilesDB(myContext);
 		cAllFiles = MediaFilesDB.getUnsyncedFiles(); //getAllFiles();
 		cAllFiles.moveToFirst();

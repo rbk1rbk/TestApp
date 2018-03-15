@@ -26,6 +26,7 @@ import android.widget.Button;
 import android.widget.DatePicker;
 import android.widget.TextView;
 import android.widget.TimePicker;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -150,7 +151,40 @@ public class MainScreen extends AppCompatActivity {
 			return true;
 		}
 
+		if (id == R.id.action_importDB) {
+			String mfdbtgt = getDatabasePath(MediaFilesDB.DATABASE_NAME).getPath();
+			String mfdbsrc = getExternalStorageDirectory() + File.separator + MediaFilesDB.DATABASE_NAME;
+			String rfdbtgt = getDatabasePath(RemoteFilesDB.DATABASE_NAME).getPath();
+			String rfdbsrc = getExternalStorageDirectory() + File.separator + RemoteFilesDB.DATABASE_NAME;
+			try {
+				Utils.cpFile(mfdbsrc, mfdbtgt);
+				Toast.makeText(myContext, "DB " + mfdbsrc + " imported", Toast.LENGTH_LONG).show();
+			} catch (IOException e) {
+				e.printStackTrace();
+				Toast.makeText(myContext, "DB " + mfdbsrc + " NOT imported", Toast.LENGTH_LONG).show();
+			}
+			try {
+				Utils.cpFile(rfdbsrc, rfdbtgt);
+				Toast.makeText(myContext, "DB " + rfdbsrc + " imported", Toast.LENGTH_LONG).show();
+			} catch (IOException e) {
+				e.printStackTrace();
+				Toast.makeText(myContext, "DB " + rfdbsrc + " NOT imported", Toast.LENGTH_LONG).show();
+			}
+		}
 		if (id == R.id.action_exportDB) {
+			String mfdbsrc = getDatabasePath(MediaFilesDB.DATABASE_NAME).getPath();
+			String mfdbtgt = getExternalStorageDirectory() + File.separator + MediaFilesDB.DATABASE_NAME;
+			String rfdbsrc = getDatabasePath(RemoteFilesDB.DATABASE_NAME).getPath();
+			String rfdbtgt = getExternalStorageDirectory() + File.separator + RemoteFilesDB.DATABASE_NAME;
+			try {
+				Utils.cpFile(mfdbsrc, mfdbtgt);
+				Toast.makeText(myContext, "DB " + mfdbsrc + " exported to " + mfdbtgt, Toast.LENGTH_LONG).show();
+				Utils.cpFile(rfdbsrc, rfdbtgt);
+				Toast.makeText(myContext, "DB " + rfdbsrc + " exported to " + rfdbtgt, Toast.LENGTH_LONG).show();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+/*
 			final byte[] buffer = new byte[8 * 1024];
 			FileInputStream fIn = null;
 			File exportFile = null;
@@ -183,6 +217,7 @@ public class MainScreen extends AppCompatActivity {
 						e.printStackTrace();
 					}
 			}
+*/
 			return true;
 		}
 
@@ -292,24 +327,39 @@ public class MainScreen extends AppCompatActivity {
 		PACKAGE_NAME = getApplicationContext().getPackageName();
 		Log.i("MainScreen", "onCreate called");
 		twPicSyncState = (TextView) findViewById(R.id.twPicSyncState);
-		if (alreadyRunning) {
-			Log.i("MainScreen", "Already running, return");
-			return;
-		}
 		settings = PreferenceManager.getDefaultSharedPreferences(this);
 		statePicSyncCopyPaused = settings.getBoolean("statePicSyncCopyPaused", true);
-		localPicSyncState = (String) ((TextView) findViewById(R.id.twPicSyncState)).getText();
-		localTotalImages = (String) ((TextView) findViewById(R.id.twTotalImages)).getText();
-		localNASConnectivity = (String) ((TextView) findViewById(R.id.twNASConnectivity)).getText();
-		localCopyFrom = (String) ((TextView) findViewById(R.id.twCopyFrom)).getText();
-		localCopyTo = (String) ((TextView) findViewById(R.id.twCopyTo)).getText();
 
-		alreadyRunning = true;
-		localCopyFrom = "none";
-		if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
-			ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
+		if (savedInstanceState==null){
+			//first time run
+			Log.d("MainScreen", "App created");
+			localPicSyncState="";
+			localTotalImages="";
+			localScannedImages="";
+			localUnsyncedImages="";
+			localNASConnectivity="";
+			localCopyFrom="";
+			localCopyTo="";
+			localLastCopiedImageTimestamp=0L;
+			if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
+				ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, READ_EXTERNAL_STORAGE_PERMISSION_CODE);
+			}
 		}
-		Log.i("MainScreen", "onCreate finished");
+		else {
+			Log.d("MainScreen", "App resumed");
+			// resumed from background or after rotation
+			localPicSyncState=savedInstanceState.getString("localPicSyncState");
+			localTotalImages=savedInstanceState.getString("localTotalImages");
+			localScannedImages=savedInstanceState.getString("localScannedImages");
+			localUnsyncedImages=savedInstanceState.getString("localUnsyncedImages");
+			localNASConnectivity=savedInstanceState.getString("localNASConnectivity");
+			localCopyFrom=savedInstanceState.getString("localCopyFrom");
+			localCopyTo=savedInstanceState.getString("localCopyTo");
+			localLastCopiedImageTimestamp=savedInstanceState.getLong("localLastCopiedImageTimestamp");
+		}
+		if (alreadyRunning) {
+			Log.i("MainScreen", "App resumed");
+		}
 	}
 
 	protected void onStop() {
@@ -347,8 +397,22 @@ public class MainScreen extends AppCompatActivity {
 	}
 
 	@Override
+	public void onSaveInstanceState(Bundle outState) {
+		Log.i("MainScreen", "old onSaveInstanceState called");
+		super.onSaveInstanceState(outState);
+		outState.putString("localPicSyncState",localPicSyncState);
+		outState.putString("localTotalImages",localTotalImages);
+		outState.putString("localScannedImages",localScannedImages);
+		outState.putString("localUnsyncedImages",localUnsyncedImages);
+		outState.putString("localNASConnectivity",localNASConnectivity);
+		outState.putString("localCopyFrom",localCopyFrom);
+		outState.putString("localCopyTo",localCopyTo);
+		outState.putLong("localLastCopiedImageTimestamp",localLastCopiedImageTimestamp);
+
+	}
+	@Override
 	public void onSaveInstanceState(Bundle outState, PersistableBundle outPersistentState) {
-		Log.i("MainScreen", "onSaveInstanceState called");
+		Log.i("MainScreen", "new onSaveInstanceState called");
 		super.onSaveInstanceState(outState, outPersistentState);
 	}
 
@@ -504,7 +568,7 @@ public class MainScreen extends AppCompatActivity {
 		((TextView) findViewById(R.id.twUnsyncedImages)).setText(localUnsyncedImages);
 		((TextView) findViewById(R.id.twNASConnectivity)).setText(localNASConnectivity);
 		((TextView) findViewById(R.id.twLastSyncedImage)).setText(dateFormat.format(new Date(localLastCopiedImageTimestamp)));
-		if (localCopyFrom.equals("none")) {
+		if (localCopyFrom==null || localCopyFrom.equals("none")) {
 			findViewById(R.id.copyProgressBar).setVisibility(View.INVISIBLE);
 		} else {
 			findViewById(R.id.copyProgressBar).setVisibility(View.VISIBLE);

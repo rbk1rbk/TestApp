@@ -3,7 +3,10 @@ package com.rbk.testapp;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -253,10 +256,6 @@ public class PicSyncScheduler extends Service {
 
 	public PicSyncScheduler() {
 	}
-
-	public boolean getRunningRecommendation(){
-		return picSyncShouldBeRunning;
-	}
 	public String getCurrentSsid() {
 		String ssid;
 		if (isConnected && connType == ConnectivityManager.TYPE_WIFI) {
@@ -266,18 +265,22 @@ public class PicSyncScheduler extends Service {
 				return ssid.replaceAll("^\"|\"$", "");
 			}
 		}
-		return null;
+		return "_null_";
 	}
 	private void verifyWifiConnection(Intent intent) {
 		String LOG_TAG="verifyWifiConnection";
 		if (intent == null)
 			return;
 		String action = intent.getAction();
+
+		NetworkInfo intentNetworkInfo = null;
 		Log.d(LOG_TAG, "Parsing intent with action " + action);
 		if (action.equals("android.net.wifi.WIFI_STATE_CHANGED")) {
 			Integer wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE,-1);
-			if (wifiState == WifiManager.WIFI_STATE_ENABLED)
+			if (wifiState == WifiManager.WIFI_STATE_ENABLED) {
 				wifiEnabled = true;
+				intentNetworkInfo = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
+			}
 			else
 				wifiEnabled = false;
 			Log.d(LOG_TAG, "Wifi state is " + wifiState);
@@ -297,13 +300,18 @@ public class PicSyncScheduler extends Service {
 				connType = networkInfo.getType();
 			}
 			Log.d(LOG_TAG, "Network type is " + networkInfo.getTypeName());
-			if (connType == ConnectivityManager.TYPE_WIFI){
-				isConnected = networkInfo.isConnected();
-				Log.d(LOG_TAG, "isConnected: "+isConnected);
+			if (connType == ConnectivityManager.TYPE_WIFI) {
+				boolean isConnectedfromNetInfo = networkInfo.isConnectedOrConnecting();
+				boolean isConnectedfromIntent = false;
+				if (intentNetworkInfo != null)
+					isConnectedfromIntent = intentNetworkInfo.isConnectedOrConnecting();
+				if ((intentNetworkInfo != null) && (isConnectedfromNetInfo != isConnectedfromIntent))
+					isConnected = isConnectedfromIntent;
+				Log.d(LOG_TAG, "isConnected: " + isConnected);
 				String extraInfo = intent.getStringExtra(ConnectivityManager.EXTRA_EXTRA_INFO);
-				if (extraInfo == null ){
+				if (extraInfo == null) {
 					onHomeWifi = (getCurrentSsid().equals(prefsWifi));
-				}else if (extraInfo.contains(prefsWifi)){
+				} else if (extraInfo.contains(prefsWifi)) {
 					onHomeWifi = true;
 					Log.d(LOG_TAG, "Home WiFi detected");
 				} else {
@@ -391,8 +399,6 @@ public class PicSyncScheduler extends Service {
 			isCharging = true;
 		}
 	}
-
-
 	private void setupReceivers(){
 		settings.registerOnSharedPreferenceChangeListener(prefChangeListener);
 		if (!isChangeInMediaFoldersRegistered) {
@@ -417,15 +423,17 @@ public class PicSyncScheduler extends Service {
 	}
 	private void finishServiceInitialization(){
 
-		/* Nema zmysel tu kontrolovat siet
-		Ak bol service nastartovany z MainScreen, ten zavola aj media Scan
-		Ak bol service nastartovany po boote, pride k nemu aj Wifi intent.
-		verifyWifiConnection(null);
-		if (!onHomeWifi)
-			broadcastInitialMediaScan();
-//		broadcastWifiState();
-		 */
-
+		if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+			// TODO: dorobit monitoring dostupnosti siete
+			// odregistruj monitoring siete definovany v Manifeste
+			// a pouzi JobCheduler
+			ComponentName componentName = new ComponentName(this.getPackageName(),this.getClass().getName());
+			JobInfo jobInfo = new JobInfo.Builder(1,componentName)
+									  .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
+									  .build();
+			JobScheduler jobScheduler = (JobScheduler)getSystemService(JOB_SCHEDULER_SERVICE);
+			int jobId = jobScheduler.schedule(jobInfo);
+		}
 		setupReceivers();
 		if (binderPicSyncScheduler == null)
 			binderPicSyncScheduler = new LocalBinder();
@@ -477,7 +485,7 @@ public class PicSyncScheduler extends Service {
 			finishServiceInitialization();
 			evaluateTheNeedOfSync();
 		}
-		if (intentSender.equals("WifiChangeReceiver")){
+		if (intentSender.equals("WifiChangeReceiver") && android.os.Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP){
 			dumpIntent(intent);
 			verifyWifiConnection(intent);
 			Log.d("wifiChangeReceiver", "onHomeWifi: " + Boolean.toString(onHomeWifi) + ",onHomeWifi_Old: " + Boolean.toString(onHomeWifi_Old));
@@ -487,7 +495,6 @@ public class PicSyncScheduler extends Service {
 				onHomeWifi_Old=onHomeWifi;
 				isConnected_Old=isConnected;
 			}
-
 		}
 		if (wakeLock != null)
 			wakeLock.release();
@@ -495,26 +502,17 @@ public class PicSyncScheduler extends Service {
 		//START_REDELIVER_INTENT
 		//START_STICKY
 	}
-
-	public void Schedule() {
-		if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-			//TODO: Pouzi JobScheduler
-		} else {
-			//TODO: Pouzi Broadcast
-		}
-
-	}
 	@Override
 	public void onCreate() {
 		super.onCreate();
 	}
+
+
+
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
 		if (wifiChangeReceiverRegistered) {
-/*
-			unregisterReceiver(wifiChangeReceiver);
-*/
 			wifiChangeReceiverRegistered = false;
 		}
 		if (chargerEventReceiverRegistered) {

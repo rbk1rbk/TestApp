@@ -1,10 +1,13 @@
 package com.rbk.testapp;
 
 import android.media.ExifInterface;
+import android.os.Build;
 import android.util.Log;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.UnknownHostException;
@@ -156,11 +159,13 @@ public class Utils {
 		boolean fileIsRemote=false;
 		boolean err=false;
 		String exifHash=null;
+		FileInputStream fi=null;
 
+		Log.d("makeExif","file is "+srcMediaFileNameFull);
 		try {
 			exifInterface = new ExifInterface(srcMediaFileNameFull);
 			exifDateTimeTaken=exifInterface.getAttribute(TAG_DATETIME);
-			if (android.os.Build.VERSION.SDK_INT < 24)
+			if (Build.VERSION.SDK_INT < 24)
 				exifISO=exifInterface.getAttributeInt(TAG_ISO,0);
 			else
 				exifISO=exifInterface.getAttributeInt(TAG_ISO_SPEED_RATINGS,0);
@@ -184,15 +189,19 @@ public class Utils {
 */
 		} catch (IOException e) {
 			e.printStackTrace();
+			Log.d("makeExif","file is "+srcMediaFileNameFull);
+		} catch (StackOverflowError e) {
+			System.err.println("ExifInterface crashed!");
 		}
 		return exifHash;
 	}
+
 	public static String getFileType(String fileNameFull) {
 		String suffix = fileNameFull.substring(fileNameFull.lastIndexOf(".")).toLowerCase();
 		if (suffix.endsWith("jpg")
 					|| suffix.endsWith("jpeg")
-					|| suffix.endsWith("png")
-					|| suffix.endsWith("raw")
+/*					|| suffix.endsWith("png")
+					|| suffix.endsWith("raw")*/
 				)
 			return Constants.FILE_TYPE_PICTURE;
 		if (suffix.endsWith("mpg")
@@ -202,5 +211,43 @@ public class Utils {
 			return Constants.FILE_TYPE_VIDEO;
 		else return null;
 	}
+	public static void cpFile(String src, String tgt) throws IOException {
+		final byte[] buffer = new byte[8 * 1024];
+		FileInputStream fIn = null;
+		File exportFile = null;
+		FileOutputStream fOut = null;
+		boolean exceptionThrown = false;
+		IOException x = null;
+		try {
+			fIn = new FileInputStream(src);
+			exportFile = new File(tgt);
+			fOut = new FileOutputStream(exportFile);
+			exportFile.createNewFile();
+			int read = 0;
+			while ((read = fIn.read(buffer, 0, buffer.length)) > 0) {
+				fOut.write(buffer, 0, read);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			x=e;
+			exceptionThrown = true;
+		} finally {
+			if (fIn != null)
+				try {
+					fIn.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 
+			if (fOut != null)
+				try {
+					fOut.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+		}
+		if (x != null){
+			throw x;
+		}
+	}
 }

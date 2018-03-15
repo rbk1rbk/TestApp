@@ -7,11 +7,15 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.annotation.RequiresApi;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -37,31 +41,45 @@ public class SyncedFoldersList extends AppCompatActivity {
 	private static Set<String> prefFolderList;
 	private static ProgressBar progressBar;
 	private static boolean mMessageReceiverRegistered = false;
+	private static final int READ_REQUEST_CODE = 42;
 
 
 	private BroadcastReceiver mMessageReceiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
 			Bundle bundle = intent.getExtras();
-			if (bundle != null) {
-
-				prefFolderList = prefs.getStringSet("prefFolderList", null);
-				if (prefFolderList == null)
-					prefFolderList = new HashSet<String>();
-				String [] mediaFolderList = bundle.getStringArray("MediaFoldersList");
-				if ((mediaFolderList != null) && (prefFolderList != null))
-					Collections.addAll(prefFolderList, mediaFolderList);
-				if (editor == null)
-					editor = prefs.edit();
-				editor.putStringSet("prefFolderList", prefFolderList);
-				editor.commit();
-				runOnUiThread(new Runnable() {
-					@Override
-					public void run() {
-						Toast.makeText(MyContext, "Scanning done", Toast.LENGTH_LONG).show();
-						populateList();
+			final String action = intent.getAction();
+			if (action.toString().equals("getMediaFoldersList")) {
+				if (bundle != null) {
+					prefFolderList = prefs.getStringSet("prefFolderList", null);
+					if (prefFolderList == null)
+						prefFolderList = new HashSet<String>();
+					String[] mediaFolderList = bundle.getStringArray("MediaFoldersList");
+					if ((mediaFolderList != null) && (prefFolderList != null))
+						Collections.addAll(prefFolderList, mediaFolderList);
+					if (editor == null)
+						editor = prefs.edit();
+					editor.putStringSet("prefFolderList", prefFolderList);
+					editor.commit();
+					runOnUiThread(new Runnable() {
+						@Override
+						public void run() {
+							Toast.makeText(MyContext, "Scanning done", Toast.LENGTH_LONG).show();
+							populateList();
+						}
+					});
+				}
+			}
+			if (action.equals(PicSync.ACTION_GET_STORAGE_PATHS_EACCESS)) {
+				if (bundle != null) {
+					String[] storagePathsEACCESS = bundle.getStringArray("storagePathsEACCESS");
+					for (String storagePathEACCESS : storagePathsEACCESS){
+						Log.d("storagePathsEACCESS",storagePathEACCESS);
+						if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+							requestPersistentPermission(null);
+						}
 					}
-				});
+				}
 			}
 		}
 
@@ -74,28 +92,32 @@ public class SyncedFoldersList extends AppCompatActivity {
 		progressBar = (ProgressBar) findViewById(R.id.progressBar);
 		mediaFolderListView = (ListView) findViewById(R.id.syncedFolderList);
 
+		if (!mMessageReceiverRegistered) {
+			LocalBroadcastManager.getInstance(getBaseContext()).registerReceiver(
+					mMessageReceiver, new IntentFilter(PicSync.ACTION_GET_STORAGE_PATHS_EACCESS));
+			LocalBroadcastManager.getInstance(getBaseContext()).registerReceiver(
+					mMessageReceiver, new IntentFilter("getMediaFoldersList"));
+			mMessageReceiverRegistered = true;
+		}
+
 		prefs = PreferenceManager.getDefaultSharedPreferences(this);
 		Intent myIntent = getIntent();
-		if (myIntent.hasExtra("action")) {
-			if (myIntent.getStringExtra("action").equals(PicSync.ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS)) {
-				progressBar.setVisibility(ProgressBar.VISIBLE);
-				callForAddMediaFoldersToSettings();
-			}
-		} else
-			populateList();
+		populateList();
 
 		Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
 		setSupportActionBar(toolbar);
 	}
 
+	private void callForPathsWithAccessError() {
+		progressBar = (ProgressBar) findViewById(R.id.progressBar);
+		Intent intentPicSync = new Intent(this, PicSync.class);
+		intentPicSync.setAction(PicSync.ACTION_GET_STORAGE_PATHS_EACCESS);
+		startService(intentPicSync);
+	}
+
 	private void callForAddMediaFoldersToSettings() {
 		progressBar = (ProgressBar) findViewById(R.id.progressBar);
 		Intent intentPicSync = new Intent(this, PicSync.class);
-		if (!mMessageReceiverRegistered) {
-			LocalBroadcastManager.getInstance(getBaseContext()).registerReceiver(
-					mMessageReceiver, new IntentFilter("getMediaFoldersList"));
-			mMessageReceiverRegistered = true;
-		}
 		intentPicSync.setAction(PicSync.ACTION_ADD_MEDIA_FOLDERS_TO_SETTINGS);
 		startService(intentPicSync);
 	}
@@ -113,6 +135,24 @@ public class SyncedFoldersList extends AppCompatActivity {
 			finish();
 			startActivity(getIntent());
 		}
+		if (reqCode == READ_REQUEST_CODE && data != null) {
+			// && resCode == Activity.RESULT_OK
+			// The document selected by the user won't be returned in the intent.
+			// Instead, a URI to that document will be contained in the return intent
+			// provided to this method as a parameter.
+			// Pull that URI using resultData.getData().
+			Uri uri = null;
+			uri = data.getData();
+/*
+			int takeFlags = 0;
+			takeFlags = (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION) & data.getFlags();
+*/
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+				getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+			}
+			Log.i("onActivityResult", "Uri: " + uri.toString());
+		}
+
 	}
 
 	private void populateList() {
@@ -176,7 +216,10 @@ public class SyncedFoldersList extends AppCompatActivity {
 				return true;
 
 			case R.id.action_detect_folders:
+				progressBar.setVisibility(ProgressBar.VISIBLE);
+				callForPathsWithAccessError();
 				callForAddMediaFoldersToSettings();
+				progressBar.setVisibility(ProgressBar.INVISIBLE);
 				return true;
 
 			default:
@@ -187,6 +230,16 @@ public class SyncedFoldersList extends AppCompatActivity {
 		}
 	}
 
+	@RequiresApi(api = Build.VERSION_CODES.KITKAT)
+	private void requestPersistentPermission(String pathToAskPermissionFor){
+		Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+/*
+		intent.addCategory(Intent.CATEGORY_OPENABLE);
+		intent.setType("image/*");
+*/
+		startActivityForResult(intent, READ_REQUEST_CODE);
+
+	}
 	@Override
 	protected void onDestroy() {
 		super.onDestroy();
